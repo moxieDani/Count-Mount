@@ -4,12 +4,12 @@
 
 	let { 
 		spreadsheetId = '', 
-		sheetName = '',
+		spreadsheetName = '',
 		range = 'Y27:AD126',
 		headerRange = 'Y26:AD26'
 	} = $props<{
 		spreadsheetId: string;
-		sheetName: string;
+		spreadsheetName: string;
 		range?: string;
 		headerRange?: string;
 	}>();
@@ -34,7 +34,8 @@
 	
 	let isLoading = $state(false);
 	let error = $state('');
-	let showTable = $state(false);
+	let currentMonth = $state(new Date().getMonth() + 1);
+	let currentYear = $state(new Date().getFullYear());
 
 	// 현재 날짜의 연도와 월 가져오기
 	function getCurrentYearMonth() {
@@ -45,13 +46,65 @@
 		};
 	}
 
-	async function fetchTableData() {
-		if (!spreadsheetId || !sheetName || !session?.accessToken) return;
+	// 월 이름 배열
+	const monthNames = ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월'];
+
+	// 스프레드시트에서 월별 시트 찾기
+	async function findSheetByMonth(month: number): Promise<string | null> {
+		if (!spreadsheetId || !session?.accessToken) return null;
+
+		try {
+			const response = await fetch(`/api/sheets/${spreadsheetId}/info`, {
+				headers: {
+					'Authorization': `Bearer ${session.accessToken}`
+				}
+			});
+
+			if (!response.ok) return null;
+
+			const data = await response.json();
+			const sheets = data.sheets || [];
+
+			const possibleFormats = [
+				`${month}월`,
+				monthNames[month - 1],
+				`${String(month).padStart(2, '0')}월`,
+				month.toString(),
+				String(month).padStart(2, '0'),
+			];
+
+			for (const format of possibleFormats) {
+				const foundSheet = sheets.find((sheet: any) => 
+					sheet.title.includes(format) || 
+					sheet.title === format ||
+					sheet.title.toLowerCase().includes(format.toLowerCase())
+				);
+				if (foundSheet) {
+					return foundSheet.title;
+				}
+			}
+
+			return null;
+		} catch (err) {
+			console.error('Error finding sheet by month:', err);
+			return null;
+		}
+	}
+
+	async function fetchTableData(targetMonth?: number) {
+		if (!spreadsheetId || !session?.accessToken) return;
 
 		isLoading = true;
 		error = '';
 
 		try {
+			const monthToFetch = targetMonth || currentMonth;
+			const sheetName = await findSheetByMonth(monthToFetch);
+			
+			if (!sheetName) {
+				throw new Error(`${monthToFetch}월에 해당하는 시트를 찾을 수 없습니다.`);
+			}
+
 			const queryParams = new URLSearchParams({
 				range,
 				headerRange,
@@ -80,11 +133,32 @@
 		}
 	}
 
-	function toggleTable() {
-		if (!showTable && !tableData) {
-			fetchTableData();
+	// 이전달로 이동
+	function goToPreviousMonth() {
+		if (currentMonth === 1) {
+			currentMonth = 12;
+			currentYear = currentYear - 1;
+		} else {
+			currentMonth = currentMonth - 1;
 		}
-		showTable = !showTable;
+		fetchTableData(currentMonth);
+	}
+
+	// 다음달로 이동
+	function goToNextMonth() {
+		if (currentMonth === 12) {
+			currentMonth = 1;
+			currentYear = currentYear + 1;
+		} else {
+			currentMonth = currentMonth + 1;
+		}
+		fetchTableData(currentMonth);
+	}
+
+	// 스프레드시트 연도 추출
+	function extractYearFromSpreadsheetName(name: string): number | null {
+		const yearMatch = name.match(/\b(20\d{2})\b/);
+		return yearMatch ? parseInt(yearMatch[1]) : null;
 	}
 
 	// 셀 값이 비어있는지 확인하는 함수
@@ -135,40 +209,78 @@
 		return colIndex === 4;
 	}
 
-	// 현재 연월 정보
-	let currentInfo = $derived(() => {
-		const { year, month } = getCurrentYearMonth();
-		return {
-			year,
-			month,
-			monthName: `${month}월`
-		};
+	// 컴포넌트 마운트 시 데이터 로드
+	onMount(() => {
+		fetchTableData();
+	});
+
+	// 연도 불일치 체크
+	let showYearMismatchWarning = $derived(() => {
+		const spreadsheetYear = extractYearFromSpreadsheetName(spreadsheetName);
+		return spreadsheetYear && spreadsheetYear !== currentYear;
+	});
+
+	// 월 네비게이션 버튼 활성화 여부
+	let canGoPrevious = $derived(() => {
+		if (showYearMismatchWarning) return false;
+		return !(currentMonth === 1 && currentYear <= 2020);
+	});
+
+	let canGoNext = $derived(() => {
+		if (showYearMismatchWarning) return false;
+		const now = new Date();
+		const currentDate = now.getFullYear() * 12 + now.getMonth() + 1;
+		const selectedDate = currentYear * 12 + currentMonth;
+		return selectedDate < currentDate;
 	});
 </script>
 
 <div class="table-container">
 	<div class="table-header">
 		<div class="header-info">
-			<h3>📊 {currentInfo.year}년 {currentInfo.monthName} 가계부 데이터</h3>
+			<h3>📊 {currentYear}년 {monthNames[currentMonth - 1]} 가계부 데이터</h3>
 			<div class="range-info">
 				<span class="range-badge">범위: {range}</span>
-				<span class="sheet-badge">시트: {sheetName}</span>
 			</div>
 		</div>
-		<button 
-			onclick={toggleTable} 
-			class="toggle-btn"
-			disabled={isLoading}
-		>
-			{#if isLoading}
-				⏳ 로드 중...
-			{:else if showTable}
-				📤 표 접기
-			{:else}
-				📥 표 보기
-			{/if}
-		</button>
+		<div class="month-navigation">
+			<button 
+				onclick={goToPreviousMonth} 
+				class="nav-btn prev-btn"
+				disabled={isLoading || !canGoPrevious}
+				title="이전 달"
+			>
+				◀ 이전달
+			</button>
+			<div class="current-month-indicator">
+				{currentYear}년 {monthNames[currentMonth - 1]}
+			</div>
+			<button 
+				onclick={goToNextMonth} 
+				class="nav-btn next-btn"
+				disabled={isLoading || !canGoNext}
+				title="다음 달"
+			>
+				다음달 ▶
+			</button>
+		</div>
 	</div>
+
+	{#if showYearMismatchWarning}
+		<div class="year-mismatch-warning">
+			<div class="warning-header">
+				<div class="warning-icon">⚠️</div>
+				<div class="warning-content">
+					<h4>연도 불일치 알림</h4>
+					<p>
+						선택한 스프레드시트는 <strong>{extractYearFromSpreadsheetName(spreadsheetName)}년</strong>용이지만 
+						현재 탐색 중인 연도는 <strong>{currentYear}년</strong>입니다.
+					</p>
+					<p>해당 연도의 시트가 존재하지 않을 수 있습니다.</p>
+				</div>
+			</div>
+		</div>
+	{/if}
 
 	{#if error}
 		<div class="error-message">
@@ -177,14 +289,13 @@
 		</div>
 	{/if}
 
-	{#if showTable}
-		<div class="table-content">
-			{#if isLoading}
-				<div class="loading-state">
-					<div class="spinner"></div>
-					<p>데이터를 불러오는 중...</p>
-				</div>
-			{:else if tableData}
+	<div class="table-content">
+		{#if isLoading}
+			<div class="loading-state">
+				<div class="spinner"></div>
+				<p>데이터를 불러오는 중...</p>
+			</div>
+		{:else if tableData}
 
 				{#if tableData.values.length > 0}
 					<div class="table-wrapper">
@@ -244,9 +355,14 @@
 						</small>
 					</div>
 				</div>
-			{/if}
-		</div>
-	{/if}
+		{:else}
+			<div class="no-data-message">
+				<div class="no-data-icon">📋</div>
+				<h4>데이터를 불러오지 못했습니다</h4>
+				<p>선택한 월의 시트를 확인해주세요.</p>
+			</div>
+		{/if}
+	</div>
 </div>
 
 <style>
@@ -291,8 +407,14 @@
 		font-family: monospace;
 	}
 
-	.toggle-btn {
-		padding: 0.75rem 1.5rem;
+	.month-navigation {
+		display: flex;
+		align-items: center;
+		gap: 1rem;
+	}
+
+	.nav-btn {
+		padding: 0.75rem 1.25rem;
 		border: 1px solid #2196f3;
 		border-radius: 8px;
 		background: white;
@@ -301,18 +423,34 @@
 		cursor: pointer;
 		transition: all 0.2s ease;
 		white-space: nowrap;
+		font-size: 0.9rem;
 	}
 
-	.toggle-btn:hover:not(:disabled) {
+	.nav-btn:hover:not(:disabled) {
 		background: #2196f3;
 		color: white;
 		transform: translateY(-1px);
 		box-shadow: 0 2px 4px rgba(33, 150, 243, 0.3);
 	}
 
-	.toggle-btn:disabled {
-		opacity: 0.6;
+	.nav-btn:disabled {
+		opacity: 0.4;
 		cursor: not-allowed;
+		background: #f5f5f5;
+		color: #999;
+		border-color: #ddd;
+	}
+
+	.current-month-indicator {
+		padding: 0.75rem 1rem;
+		background: rgba(33, 150, 243, 0.1);
+		border: 1px solid rgba(33, 150, 243, 0.2);
+		border-radius: 8px;
+		color: #2196f3;
+		font-weight: 600;
+		font-size: 0.95rem;
+		min-width: 140px;
+		text-align: center;
 	}
 
 	.error-message {
@@ -468,30 +606,74 @@
 		font-weight: 500;
 	}
 
-	.empty-data {
+	.empty-data, .no-data-message {
 		text-align: center;
 		padding: 3rem 1rem;
 		color: #666;
 	}
 
-	.empty-icon {
+	.empty-icon, .no-data-icon {
 		font-size: 3rem;
 		margin-bottom: 1rem;
 	}
 
-	.empty-data h4 {
+	.empty-data h4, .no-data-message h4 {
 		margin: 0 0 0.5rem 0;
 		color: #333;
 		font-size: 1.25rem;
 	}
 
-	.empty-data p {
+	.empty-data p, .no-data-message p {
 		margin: 0 0 1.5rem 0;
 		line-height: 1.5;
 	}
 
 	.empty-actions {
 		margin-top: 1rem;
+	}
+
+	/* 연도 불일치 경고 스타일 */
+	.year-mismatch-warning {
+		background: linear-gradient(135deg, #fff3cd 0%, #fef6e7 100%);
+		border: 1px solid #f5c6cb;
+		border-left: 4px solid #ffc107;
+		margin: 0;
+		padding: 1.5rem;
+		position: relative;
+	}
+
+	.warning-header {
+		display: flex;
+		align-items: flex-start;
+		gap: 1rem;
+		margin-bottom: 1rem;
+	}
+
+	.warning-icon {
+		font-size: 2rem;
+		line-height: 1;
+		flex-shrink: 0;
+	}
+
+	.warning-content {
+		flex: 1;
+	}
+
+	.warning-content h4 {
+		margin: 0 0 0.5rem 0;
+		color: #856404;
+		font-size: 1.125rem;
+		font-weight: 600;
+	}
+
+	.warning-content p {
+		margin: 0 0 0.5rem 0;
+		color: #856404;
+		line-height: 1.5;
+	}
+
+	.warning-content strong {
+		color: #664d03;
 	}
 
 	.table-footer {
@@ -514,9 +696,21 @@
 			align-items: stretch;
 		}
 
-		.toggle-btn {
-			width: 100%;
-			text-align: center;
+		.month-navigation {
+			justify-content: center;
+			flex-wrap: wrap;
+			gap: 0.5rem;
+		}
+
+		.nav-btn {
+			padding: 0.625rem 1rem;
+			font-size: 0.8rem;
+		}
+
+		.current-month-indicator {
+			padding: 0.625rem 0.75rem;
+			font-size: 0.85rem;
+			min-width: 120px;
 		}
 
 		.table-content {

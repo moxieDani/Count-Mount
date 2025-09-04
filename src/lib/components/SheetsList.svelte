@@ -217,15 +217,12 @@
 				</div>
 			</div>
 
-			<!-- 현재 월 시트 데이터 표 -->
-			{#if currentMonthSheet}
-				<SpreadsheetTable 
-					{spreadsheetId} 
-					sheetName={currentMonthSheet.title}
-					range="Y27:AD126"
-					{...{ headerRange: "Y26:AD26" }}
-				/>
-			{/if}
+			<!-- 월별 시트 데이터 표 -->
+			<SpreadsheetTable 
+				{spreadsheetId} 
+				range="Y27:AD126"
+				{...{ spreadsheetName, headerRange: "Y26:AD26" }}
+			/>
 		{/if}
 		<div class="sheets-grid">
 			{#each sheets as sheet}
