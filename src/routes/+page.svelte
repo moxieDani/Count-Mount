@@ -109,7 +109,7 @@
 										class="url-input"
 									/>
 									<button 
-										onclick={() => navigator.clipboard.writeText(selectedFile.url)}
+										onclick={() => selectedFile && navigator.clipboard.writeText(selectedFile.url)}
 										class="copy-btn"
 										title="URL 복사"
 									>

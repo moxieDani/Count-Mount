@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
+	import SpreadsheetTable from './SpreadsheetTable.svelte';
 
 	let { spreadsheetId = '', spreadsheetName = '' } = $props();
 
@@ -215,6 +216,16 @@
 					</button>
 				</div>
 			</div>
+
+			<!-- 현재 월 시트 데이터 표 -->
+			{#if currentMonthSheet}
+				<SpreadsheetTable 
+					{spreadsheetId} 
+					sheetName={currentMonthSheet.title}
+					range="Y27:AD126"
+					{...{ headerRange: "Y26:AD26" }}
+				/>
+			{/if}
 		{/if}
 		<div class="sheets-grid">
 			{#each sheets as sheet}
