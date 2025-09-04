@@ -2,7 +2,7 @@
 	import { signIn, signOut } from '@auth/sveltekit/client'
 	import { page } from '$app/stores'
 
-	$: session = $page.data.session
+	let session = $derived($page.data.session);
 
 	async function handleSignIn() {
 		await signIn('google')
@@ -24,14 +24,14 @@
 				<p class="user-email">{session.user?.email}</p>
 			</div>
 		</div>
-		<button on:click={handleSignOut} class="sign-out-button">
+		<button onclick={handleSignOut} class="sign-out-button">
 			로그아웃
 		</button>
 	{:else}
 		<div class="login-container">
 			<h2>Count-Mount에 오신 것을 환영합니다</h2>
 			<p>Google 계정으로 로그인해주세요.</p>
-			<button on:click={handleSignIn} class="google-login-button">
+			<button onclick={handleSignIn} class="google-login-button">
 				<svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
 					<path fill-rule="evenodd" clip-rule="evenodd" d="M17.64 9.20454C17.64 8.56636 17.5827 7.95272 17.4764 7.36363H9V10.8445H13.8436C13.635 11.9699 13.0009 12.9231 12.0477 13.5613V15.8195H14.9563C16.6581 14.2527 17.64 11.9454 17.64 9.20454Z" fill="#4285F4"/>
 					<path fill-rule="evenodd" clip-rule="evenodd" d="M8.99996 18C11.43 18 13.467 17.1941 14.9563 15.8195L12.0477 13.5613C11.2418 14.1013 10.2109 14.4204 8.99996 14.4204C6.65632 14.4204 4.67225 12.8372 3.96405 10.71H0.957031V13.0418C2.43819 15.9831 5.48183 18 8.99996 18Z" fill="#34A853"/>

@@ -19,7 +19,23 @@ Google OAuth2를 사용한 SvelteKit 애플리케이션입니다.
    - `https://yourdomain.com/auth/callback/google` (운영환경)
 8. **Create** 클릭 후 Client ID와 Client Secret 복사
 
-### 2. 환경 변수 설정
+### 2. Google APIs 활성화
+
+Google Cloud Console에서 다음 API들을 활성화해야 합니다:
+
+1. **Google Picker API** (또는 Drive API)
+2. **Google Sheets API**
+3. **Google+ API** (OAuth용)
+
+**APIs & Services** → **Library**에서 각 API를 검색하여 활성화하세요.
+
+### 3. API 키 생성
+
+1. **APIs & Services** → **Credentials** 이동
+2. **Create Credentials** → **API key** 클릭
+3. 생성된 API 키를 `.env` 파일에 추가
+
+### 4. 환경 변수 설정
 
 1. `.env` 파일을 생성하고 다음 값들을 설정:
 
@@ -28,6 +44,9 @@ Google OAuth2를 사용한 SvelteKit 애플리케이션입니다.
 GOOGLE_CLIENT_ID=your_actual_google_client_id
 GOOGLE_CLIENT_SECRET=your_actual_google_client_secret
 
+# Google API Key (Picker API용)
+GOOGLE_API_KEY=your_actual_google_api_key
+
 # Auth.js Secret - 랜덤한 문자열 생성 필요
 AUTH_SECRET=your_random_secret_string_here
 
@@ -35,7 +54,7 @@ AUTH_SECRET=your_random_secret_string_here
 AUTH_TRUST_HOST=true
 ```
 
-### 3. AUTH_SECRET 생성 방법
+### 5. AUTH_SECRET 생성 방법
 
 터미널에서 다음 명령어를 실행하여 랜덤 시크릿 생성:
 
@@ -63,6 +82,26 @@ npm run dev -- --open
 
 브라우저에서 `http://localhost:5173`으로 접속하면 Google 로그인 페이지가 표시됩니다.
 
+## 사용법
+
+### 1. 로그인
+- Google 계정으로 로그인
+
+### 2. 스프레드시트 선택
+- "스프레드시트 선택하기" 버튼 클릭
+- Google Drive에서 편집할 스프레드시트 선택
+
+### 3. 편집
+- 셀을 클릭하여 직접 편집
+- Enter: 저장, Esc: 취소
+- "행 추가" / "열 추가" 버튼으로 확장
+- "새로고침" 버튼으로 최신 데이터 로드
+
+### 4. 권한
+앱이 다음 권한을 요청합니다:
+- **Drive 파일 접근**: 스프레드시트 선택을 위해
+- **Sheets 편집**: 스프레드시트 읽기/쓰기를 위해
+
 ## 빌드
 
 프로덕션 버전을 생성:
@@ -82,6 +121,10 @@ npm run preview
 - ✅ Google OAuth2 로그인/로그아웃
 - ✅ 사용자 세션 관리
 - ✅ 로그인된 사용자만 메인 앱 접근 가능
+- ✅ **Google Picker API**: Drive에서 스프레드시트 선택
+- ✅ **Google Sheets API**: 스프레드시트 실시간 편집
+- ✅ **인라인 편집**: 브라우저에서 바로 셀 편집 가능
+- ✅ 행/열 추가 기능
 - ✅ 반응형 디자인
 
 ## 기술 스택
@@ -89,6 +132,8 @@ npm run preview
 - **Frontend**: SvelteKit, TypeScript
 - **Authentication**: Auth.js (formerly NextAuth.js)
 - **OAuth Provider**: Google
+- **APIs**: Google Picker API, Google Sheets API
+- **Backend**: Node.js with googleapis
 - **Build Tool**: Vite
 
 ## 배포
