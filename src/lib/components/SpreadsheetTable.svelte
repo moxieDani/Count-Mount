@@ -4,12 +4,10 @@
 
 	let { 
 		spreadsheetId = '', 
-		spreadsheetName = '',
 		range = 'Y27:AD126',
 		headerRange = 'Y26:AD26'
 	} = $props<{
 		spreadsheetId: string;
-		spreadsheetName: string;
 		range?: string;
 		headerRange?: string;
 	}>();
@@ -37,13 +35,37 @@
 	let currentMonth = $state(new Date().getMonth() + 1);
 	let currentYear = $state(new Date().getFullYear());
 
-	// 현재 날짜의 연도와 월 가져오기
-	function getCurrentYearMonth() {
-		const now = new Date();
-		return {
-			year: now.getFullYear(),
-			month: now.getMonth() + 1
-		};
+	// 총 지출 금액을 계산하는 함수
+	function calculateTotalExpense(): number {
+		if (!tableData?.values || tableData.values.length === 0) {
+			return 0;
+		}
+
+		let total = 0;
+		
+		// AC 열은 테이블의 마지막에서 두 번째 열 (AD가 마지막)
+		// Y~AD 범위에서 AC는 4번째 열 (Y=0, Z=1, AA=2, AB=3, AC=4)
+		const expenseColumnIndex = 4; 
+		
+		for (const row of tableData.values) {
+			if (row.length > expenseColumnIndex) {
+				const cellValue = row[expenseColumnIndex];
+				if (cellValue && typeof cellValue === 'string') {
+					// 숫자가 아닌 문자 제거하고 숫자만 추출
+					const numericValue = parseFloat(cellValue.replace(/[^\d.-]/g, ''));
+					if (!isNaN(numericValue)) {
+						total += numericValue;
+					}
+				}
+			}
+		}
+		
+		return total;
+	}
+
+	// 숫자를 천단위 콤마로 포맷하는 함수
+	function formatNumber(num: number): string {
+		return num.toLocaleString('ko-KR');
 	}
 
 	// 월 이름 배열
@@ -155,11 +177,6 @@
 		fetchTableData(currentMonth);
 	}
 
-	// 스프레드시트 연도 추출
-	function extractYearFromSpreadsheetName(name: string): number | null {
-		const yearMatch = name.match(/\b(20\d{2})\b/);
-		return yearMatch ? parseInt(yearMatch[1]) : null;
-	}
 
 	// 셀 값이 비어있는지 확인하는 함수
 	function isCellEmpty(value: string | undefined | null): boolean {
@@ -214,20 +231,12 @@
 		fetchTableData();
 	});
 
-	// 연도 불일치 체크
-	let showYearMismatchWarning = $derived(() => {
-		const spreadsheetYear = extractYearFromSpreadsheetName(spreadsheetName);
-		return spreadsheetYear && spreadsheetYear !== currentYear;
-	});
-
 	// 월 네비게이션 버튼 활성화 여부
 	let canGoPrevious = $derived(() => {
-		if (showYearMismatchWarning) return false;
 		return !(currentMonth === 1 && currentYear <= 2020);
 	});
 
 	let canGoNext = $derived(() => {
-		if (showYearMismatchWarning) return false;
 		const now = new Date();
 		const currentDate = now.getFullYear() * 12 + now.getMonth() + 1;
 		const selectedDate = currentYear * 12 + currentMonth;
@@ -239,8 +248,8 @@
 	<div class="table-header">
 		<div class="header-info">
 			<h3>📊 {currentYear}년 {monthNames[currentMonth - 1]} 가계부 데이터</h3>
-			<div class="range-info">
-				<span class="range-badge">범위: {range}</span>
+			<div class="expense-info">
+				<span class="expense-badge">총 지출: {formatNumber(calculateTotalExpense())}원</span>
 			</div>
 		</div>
 		<div class="month-navigation">
@@ -266,21 +275,6 @@
 		</div>
 	</div>
 
-	{#if showYearMismatchWarning}
-		<div class="year-mismatch-warning">
-			<div class="warning-header">
-				<div class="warning-icon">⚠️</div>
-				<div class="warning-content">
-					<h4>연도 불일치 알림</h4>
-					<p>
-						선택한 스프레드시트는 <strong>{extractYearFromSpreadsheetName(spreadsheetName)}년</strong>용이지만 
-						현재 탐색 중인 연도는 <strong>{currentYear}년</strong>입니다.
-					</p>
-					<p>해당 연도의 시트가 존재하지 않을 수 있습니다.</p>
-				</div>
-			</div>
-		</div>
-	{/if}
 
 	{#if error}
 		<div class="error-message">
@@ -390,21 +384,21 @@
 		font-weight: 600;
 	}
 
-	.range-info {
+	.expense-info {
 		display: flex;
 		gap: 0.5rem;
 		flex-wrap: wrap;
 	}
 
-	.range-badge, .sheet-badge {
+	.expense-badge {
 		display: inline-block;
-		padding: 0.25rem 0.5rem;
-		background: rgba(255, 255, 255, 0.8);
-		border: 1px solid rgba(0, 0, 0, 0.1);
+		padding: 0.25rem 0.8rem;
+		background: rgba(76, 175, 80, 0.1);
+		border: 1px solid rgba(76, 175, 80, 0.3);
 		border-radius: 4px;
-		font-size: 0.75rem;
-		color: #555;
-		font-family: monospace;
+		font-size: 0.8rem;
+		color: #388e3c;
+		font-weight: 600;
 	}
 
 	.month-navigation {
@@ -414,16 +408,16 @@
 	}
 
 	.nav-btn {
-		padding: 0.75rem 1.25rem;
+		padding: 0.5rem 0.9rem;
 		border: 1px solid #2196f3;
-		border-radius: 8px;
+		border-radius: 6px;
 		background: white;
 		color: #2196f3;
 		font-weight: 500;
 		cursor: pointer;
 		transition: all 0.2s ease;
 		white-space: nowrap;
-		font-size: 0.9rem;
+		font-size: 0.8rem;
 	}
 
 	.nav-btn:hover:not(:disabled) {
@@ -442,14 +436,14 @@
 	}
 
 	.current-month-indicator {
-		padding: 0.75rem 1rem;
+		padding: 0.5rem 0.8rem;
 		background: rgba(33, 150, 243, 0.1);
 		border: 1px solid rgba(33, 150, 243, 0.2);
-		border-radius: 8px;
+		border-radius: 6px;
 		color: #2196f3;
 		font-weight: 600;
-		font-size: 0.95rem;
-		min-width: 140px;
+		font-size: 0.8rem;
+		min-width: 120px;
 		text-align: center;
 	}
 
@@ -632,49 +626,6 @@
 		margin-top: 1rem;
 	}
 
-	/* 연도 불일치 경고 스타일 */
-	.year-mismatch-warning {
-		background: linear-gradient(135deg, #fff3cd 0%, #fef6e7 100%);
-		border: 1px solid #f5c6cb;
-		border-left: 4px solid #ffc107;
-		margin: 0;
-		padding: 1.5rem;
-		position: relative;
-	}
-
-	.warning-header {
-		display: flex;
-		align-items: flex-start;
-		gap: 1rem;
-		margin-bottom: 1rem;
-	}
-
-	.warning-icon {
-		font-size: 2rem;
-		line-height: 1;
-		flex-shrink: 0;
-	}
-
-	.warning-content {
-		flex: 1;
-	}
-
-	.warning-content h4 {
-		margin: 0 0 0.5rem 0;
-		color: #856404;
-		font-size: 1.125rem;
-		font-weight: 600;
-	}
-
-	.warning-content p {
-		margin: 0 0 0.5rem 0;
-		color: #856404;
-		line-height: 1.5;
-	}
-
-	.warning-content strong {
-		color: #664d03;
-	}
 
 	.table-footer {
 		margin-top: 1rem;
@@ -703,14 +654,14 @@
 		}
 
 		.nav-btn {
-			padding: 0.625rem 1rem;
-			font-size: 0.8rem;
+			padding: 0.4rem 0.7rem;
+			font-size: 0.75rem;
 		}
 
 		.current-month-indicator {
-			padding: 0.625rem 0.75rem;
-			font-size: 0.85rem;
-			min-width: 120px;
+			padding: 0.4rem 0.6rem;
+			font-size: 0.75rem;
+			min-width: 100px;
 		}
 
 		.table-content {

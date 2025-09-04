@@ -29,13 +29,6 @@
 		}
 	}
 
-	// 연도 불일치 체크를 위한 derived value
-	let showYearMismatchWarning = $derived.by(() => {
-		const spreadsheetYear = extractYearFromSpreadsheetName(spreadsheetName);
-		const currentYear = new Date().getFullYear();
-		return spreadsheetYear && spreadsheetYear !== currentYear;
-	});
-
 	let sheets = $state<Array<{
 		sheetId: number;
 		title: string;
@@ -153,35 +146,6 @@
 	{#if error}
 		<div class="error-message">
 			❌ {error}
-		</div>
-	{/if}
-
-	<!-- 연도 불일치 경고 -->
-	{#if showYearMismatchWarning && !isLoading}
-		<div class="year-mismatch-warning">
-			<div class="warning-header">
-				<div class="warning-icon">⚠️</div>
-				<div class="warning-content">
-					<h4>연도 불일치 알림</h4>
-					<p>
-						선택한 스프레드시트는 <strong>{extractYearFromSpreadsheetName(spreadsheetName)}년</strong>용이지만 
-						현재는 <strong>{new Date().getFullYear()}년</strong>입니다.
-					</p>
-				</div>
-			</div>
-			<div class="warning-actions">
-				<button class="warning-btn primary" onclick={() => alert('현재 연도 스프레드시트 찾기 기능은 준비 중입니다.')}>
-					📊 {new Date().getFullYear()}년 가계부 찾기
-				</button>
-				<button class="warning-btn secondary" onclick={() => {}}>
-					✅ 현재 시트 계속 사용
-				</button>
-			</div>
-			<div class="warning-footer">
-				<small>
-					💡 현재 연도 스프레드시트가 없으면 새로 연동이 필요합니다.
-				</small>
-			</div>
 		</div>
 	{/if}
 
@@ -332,102 +296,6 @@
 		background: #fee;
 		color: #c33;
 		border-bottom: 1px solid #fcc;
-	}
-
-	/* 연도 불일치 경고 스타일 */
-	.year-mismatch-warning {
-		background: linear-gradient(135deg, #fff3cd 0%, #fef6e7 100%);
-		border: 1px solid #f5c6cb;
-		border-left: 4px solid #ffc107;
-		margin: 0;
-		padding: 1.5rem;
-		position: relative;
-	}
-
-	.warning-header {
-		display: flex;
-		align-items: flex-start;
-		gap: 1rem;
-		margin-bottom: 1rem;
-	}
-
-	.warning-icon {
-		font-size: 2rem;
-		line-height: 1;
-		flex-shrink: 0;
-	}
-
-	.warning-content {
-		flex: 1;
-	}
-
-	.warning-content h4 {
-		margin: 0 0 0.5rem 0;
-		color: #856404;
-		font-size: 1.125rem;
-		font-weight: 600;
-	}
-
-	.warning-content p {
-		margin: 0;
-		color: #856404;
-		line-height: 1.5;
-	}
-
-	.warning-content strong {
-		color: #664d03;
-	}
-
-	.warning-actions {
-		display: flex;
-		gap: 0.75rem;
-		margin-bottom: 1rem;
-	}
-
-	.warning-btn {
-		padding: 0.625rem 1.25rem;
-		border-radius: 6px;
-		font-size: 0.875rem;
-		font-weight: 500;
-		cursor: pointer;
-		transition: all 0.2s ease;
-		border: none;
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-	}
-
-	.warning-btn.primary {
-		background: #ffc107;
-		color: #212529;
-		box-shadow: 0 2px 4px rgba(255, 193, 7, 0.3);
-	}
-
-	.warning-btn.primary:hover {
-		background: #e0a800;
-		transform: translateY(-1px);
-		box-shadow: 0 3px 6px rgba(255, 193, 7, 0.4);
-	}
-
-	.warning-btn.secondary {
-		background: rgba(255, 255, 255, 0.8);
-		color: #856404;
-		border: 1px solid rgba(133, 100, 4, 0.3);
-	}
-
-	.warning-btn.secondary:hover {
-		background: white;
-		border-color: #856404;
-	}
-
-	.warning-footer {
-		text-align: center;
-		margin-top: 0.5rem;
-	}
-
-	.warning-footer small {
-		color: #856404;
-		font-style: italic;
 	}
 
 	.loading, .empty-state {
@@ -701,23 +569,5 @@
 			padding: 0.625rem 1rem;
 		}
 
-		.year-mismatch-warning {
-			padding: 1rem;
-		}
-
-		.warning-header {
-			flex-direction: column;
-			text-align: center;
-			gap: 0.75rem;
-		}
-
-		.warning-actions {
-			flex-direction: column;
-			gap: 0.5rem;
-		}
-
-		.warning-btn {
-			justify-content: center;
-		}
 	}
 </style>
