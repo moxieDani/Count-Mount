@@ -1,21 +1,64 @@
 <script lang="ts">
-	import { page } from '$app/stores'
+	import { onMount } from 'svelte';
+	import { page } from '$app/state'
+	import { browser } from '$app/environment';
 	import LoginButton from '$lib/components/LoginButton.svelte'
 	import HeaderAuth from '$lib/components/HeaderAuth.svelte'
 	import GooglePicker from '$lib/components/GooglePicker.svelte'
 	import SheetsList from '$lib/components/SheetsList.svelte'
 
-	let session = $derived($page.data.session);
+	let session = $derived(page.data.session);
 
 	let selectedFile = $state<{id: string, name: string, url: string, mimeType: string} | null>(null);
 
+	const STORAGE_KEY = 'count-mount-selected-spreadsheet';
+
+	onMount(() => {
+		// 페이지 로드 시 localStorage에서 선택된 파일 정보 복원
+		loadSelectedFile();
+	});
+
+	function loadSelectedFile() {
+		if (!browser) return;
+		
+		try {
+			const stored = localStorage.getItem(STORAGE_KEY);
+			if (stored) {
+				const fileInfo = JSON.parse(stored);
+				selectedFile = fileInfo;
+				console.log('Restored selected spreadsheet from storage:', fileInfo);
+			}
+		} catch (error) {
+			console.error('Failed to load selected file from storage:', error);
+			// 저장된 데이터가 손상된 경우 제거
+			localStorage.removeItem(STORAGE_KEY);
+		}
+	}
+
+	function saveSelectedFile(fileInfo: {id: string, name: string, url: string, mimeType: string} | null) {
+		if (!browser) return;
+		
+		try {
+			if (fileInfo) {
+				localStorage.setItem(STORAGE_KEY, JSON.stringify(fileInfo));
+			} else {
+				localStorage.removeItem(STORAGE_KEY);
+			}
+		} catch (error) {
+			console.error('Failed to save selected file to storage:', error);
+		}
+	}
+
 	function handleFileSelected(fileInfo: {id: string, name: string, url: string, mimeType: string}) {
 		selectedFile = fileInfo;
+		saveSelectedFile(fileInfo);
 		console.log('Selected spreadsheet:', fileInfo);
 	}
 
 	function clearSelection() {
 		selectedFile = null;
+		saveSelectedFile(null);
+		console.log('Cleared spreadsheet selection');
 	}
 </script>
 

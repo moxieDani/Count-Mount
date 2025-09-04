@@ -1,14 +1,18 @@
 <script lang="ts">
 	import { signIn, signOut } from '@auth/sveltekit/client'
-	import { page } from '$app/stores'
+	import { page } from '$app/state'
 
-	let session = $derived($page.data.session);
+	let session = $derived(page.data.session);
 
 	async function handleSignIn() {
 		await signIn('google')
 	}
 
 	async function handleSignOut() {
+		// localStorage에서 선택된 스프레드시트 정보 제거
+		if (typeof localStorage !== 'undefined') {
+			localStorage.removeItem('count-mount-selected-spreadsheet');
+		}
 		await signOut()
 	}
 </script>

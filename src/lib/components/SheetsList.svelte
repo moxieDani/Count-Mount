@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { page } from '$app/stores';
+	import { page } from '$app/state';
 
 	let { spreadsheetId = '', spreadsheetName = '' } = $props();
 
@@ -18,7 +18,7 @@
 	let isLoading = $state(false);
 	let error = $state('');
 
-	let session = $derived($page.data.session);
+	let session = $derived(page.data.session);
 
 	onMount(async () => {
 		if (spreadsheetId) {

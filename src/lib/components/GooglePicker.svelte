@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { page } from '$app/stores';
+	import { page } from '$app/state';
 	import { browser } from '$app/environment';
 
 	let { onFileSelected = () => {} } = $props();
@@ -10,7 +10,7 @@
 	let accessToken = $state('');
 	let apiKey = $state('');
 
-	let session = $derived($page.data.session);
+	let session = $derived(page.data.session);
 
 	onMount(async () => {
 		if (!browser) return;
