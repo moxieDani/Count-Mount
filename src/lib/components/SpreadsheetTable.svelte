@@ -469,7 +469,7 @@
 <div class="table-container">
 	<div class="table-header">
 		<div class="header-info">
-			<h3>📊 {currentYear}년 {monthNames[currentMonth - 1]} 가계부</h3>
+			<h3>📊 {currentYear}년 {monthNames[currentMonth - 1]}</h3>
 			<div class="expense-info">
 				<span class="expense-badge">총 지출: {formatNumber(calculateTotalExpense())}원</span>
 				<button 
