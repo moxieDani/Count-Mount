@@ -491,9 +491,17 @@
 <div class="table-container">
 	<div class="table-header">
 		<div class="header-info">
-			<h3>📊 {currentYear}년 {monthNames[currentMonth - 1]} 가계부 데이터</h3>
+			<h3>📊 {currentYear}년 {monthNames[currentMonth - 1]} 가계부</h3>
 			<div class="expense-info">
 				<span class="expense-badge">총 지출: {formatNumber(calculateTotalExpense())}원</span>
+				<button 
+					onclick={() => fetchTableData()} 
+					class="nav-btn refresh-btn"
+					disabled={isLoading}
+					title="새로고침"
+				>
+					🔄 새로고침
+				</button>
 			</div>
 		</div>
 		<div class="month-navigation">
@@ -669,7 +677,9 @@
 	}
 
 	.expense-badge {
-		display: inline-block;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
 		padding: 0.25rem 0.8rem;
 		background: rgba(76, 175, 80, 0.1);
 		border: 1px solid rgba(76, 175, 80, 0.3);
@@ -677,6 +687,8 @@
 		font-size: 0.8rem;
 		color: #388e3c;
 		font-weight: 600;
+		text-align: center;
+		line-height: 1.2;
 	}
 
 	.month-navigation {
@@ -711,6 +723,20 @@
 		background: #f5f5f5;
 		color: #999;
 		border-color: #ddd;
+	}
+
+	.refresh-btn {
+		background: #4CAF50;
+		color: white;
+		border-color: #4CAF50;
+	}
+
+	.refresh-btn:hover:not(:disabled) {
+		background: #45a049;
+		border-color: #45a049;
+		color: white;
+		transform: translateY(-1px);
+		box-shadow: 0 2px 4px rgba(76, 175, 80, 0.3);
 	}
 
 	.current-month-indicator {
