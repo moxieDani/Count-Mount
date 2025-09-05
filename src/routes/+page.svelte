@@ -104,7 +104,7 @@
 {#if session}
 	<main class="app-main">
 		<div class="header">
-			<h1>Count-Mount</h1>
+			<h1>가계쀼</h1>
 			<div class="header-actions">
 				<HeaderAuth />
 			</div>

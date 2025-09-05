@@ -7,7 +7,7 @@
 
 <svelte:head>
 	<link rel="icon" href={favicon} />
-	<title>Count-Mount</title>
+	<title>가계쀼</title>
 </svelte:head>
 
 {@render children?.()}
