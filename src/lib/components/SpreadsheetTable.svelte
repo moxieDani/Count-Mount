@@ -2,8 +2,11 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 
+	// Google Picker API 타입 정의
+	const googlePicker: any = typeof window !== 'undefined' ? (window as any).google : null;
+
 	let { 
-		spreadsheetId = '', 
+		spreadsheetId: initialSpreadsheetId = '', 
 		range = 'Y27:AD126',
 		headerRange = 'Y26:AD26'
 	} = $props<{
@@ -13,6 +16,9 @@
 	}>();
 
 	let session = $derived(page.data.session);
+	
+	// 동적으로 변경 가능한 스프레드시트 ID
+	let spreadsheetId = $state(initialSpreadsheetId);
 	
 	let tableData = $state<{
 		values: string[][];
@@ -34,6 +40,23 @@
 	let error = $state('');
 	let currentMonth = $state(new Date().getMonth() + 1);
 	let currentYear = $state(new Date().getFullYear());
+	
+	// 년도/월 선택 모달 상태
+	let showDatePicker = $state(false);
+	let selectedYear = $state(new Date().getFullYear());
+	let selectedMonth = $state(new Date().getMonth() + 1);
+	
+	// month picker 값 (YYYY-MM 형식)
+	let monthPickerValue = $state(`${new Date().getFullYear()}-${(new Date().getMonth() + 1).toString().padStart(2, '0')}`);
+	
+	// monthPickerValue가 변경될 때마다 selectedYear와 selectedMonth 업데이트
+	$effect(() => {
+		if (monthPickerValue) {
+			const [year, month] = monthPickerValue.split('-');
+			selectedYear = parseInt(year);
+			selectedMonth = parseInt(month);
+		}
+	});
 
 	// 총 지출 금액을 계산하는 함수
 	function calculateTotalExpense(): number {
@@ -70,6 +93,107 @@
 
 	// 월 이름 배열
 	const monthNames = ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월'];
+
+	// 연도별 스프레드시트를 찾는 함수 (공유 드라이브 포함)
+	async function findSpreadsheetByYear(targetYear: number): Promise<string | null> {
+		if (!session?.accessToken) return null;
+
+		try {
+			console.log(`Searching for ${targetYear} spreadsheet in shared drives...`);
+			
+			// 여러 가지 패턴으로 검색
+			const searchPatterns = [
+				`name contains '${targetYear} 가계부'`,
+				`name contains '${targetYear}가계부'`,
+				`name contains '가계부 ${targetYear}'`,
+				`name:'${targetYear} 가계부'`,
+				`name:'${targetYear}가계부'`,
+				`name contains '${targetYear}'`
+			];
+			
+			// 각 패턴으로 검색 (공유 드라이브 포함)
+			for (const pattern of searchPatterns) {
+				const searchQuery = `${pattern} and mimeType='application/vnd.google-apps.spreadsheet'`;
+				console.log(`Trying search pattern: ${searchQuery}`);
+				
+				// 공유 드라이브 포함 검색
+				const searchUrl = `https://www.googleapis.com/drive/v3/files?` + 
+					`q=${encodeURIComponent(searchQuery)}&` +
+					`supportsAllDrives=true&` +           // 공유 드라이브 지원 여부 명시
+					`includeItemsFromAllDrives=true&` +   // 검색 결과에 공유 드라이브 항목 포함
+					`corpora=allDrives&` +               // 모든 공유 드라이브 검색
+					`orderBy=modifiedTime desc`;          // 최근 수정순으로 정렬
+
+				const response = await fetch(searchUrl, {
+					headers: {
+						'Authorization': `Bearer ${session.accessToken}`
+					}
+				});
+
+				if (!response.ok) {
+					console.error(`Shared drive search failed with status: ${response.status}`);
+					const errorText = await response.text();
+					console.error('Error details:', errorText);
+					
+					// 공유 드라이브 검색이 실패하면 개인 드라이브에서 검색 시도
+					const fallbackUrl = `https://www.googleapis.com/drive/v3/files?` + 
+						`q=${encodeURIComponent(searchQuery)}&` +
+						`orderBy=modifiedTime desc`;
+
+					const fallbackResponse = await fetch(fallbackUrl, {
+						headers: {
+							'Authorization': `Bearer ${session.accessToken}`
+						}
+					});
+
+					if (fallbackResponse.ok) {
+						const fallbackData = await fallbackResponse.json();
+						const fallbackFiles = fallbackData.files || [];
+						console.log(`Found ${fallbackFiles.length} files in personal drive with pattern: ${pattern}`);
+						
+						for (const file of fallbackFiles) {
+							console.log(`Checking personal drive file: ${file.name} (ID: ${file.id})`);
+							if (file.name && (
+								file.name.includes(`${targetYear} 가계부`) ||
+								file.name.includes(`${targetYear}가계부`) ||
+								file.name.includes(`가계부 ${targetYear}`) ||
+								(file.name.includes(targetYear.toString()) && file.name.includes('가계부'))
+							)) {
+								console.log(`Found matching spreadsheet in personal drive: ${file.name}`);
+								return file.id;
+							}
+						}
+					}
+					continue;
+				}
+
+				const data = await response.json();
+				const files = data.files || [];
+				
+				console.log(`Found ${files.length} files with pattern: ${pattern}`);
+				
+				// 검색 결과에서 가장 적합한 파일 찾기
+				for (const file of files) {
+					console.log(`Checking file: ${file.name} (ID: ${file.id})`);
+					if (file.name && (
+						file.name.includes(`${targetYear} 가계부`) ||
+						file.name.includes(`${targetYear}가계부`) ||
+						file.name.includes(`가계부 ${targetYear}`) ||
+						(file.name.includes(targetYear.toString()) && file.name.includes('가계부'))
+					)) {
+						console.log(`Found matching spreadsheet in shared drive: ${file.name}`);
+						return file.id;
+					}
+				}
+			}
+
+			console.log(`No spreadsheet found for year ${targetYear} in any drive`);
+			return null;
+		} catch (err) {
+			console.error('Error searching for spreadsheet by year:', err);
+			return null;
+		}
+	}
 
 	// 스프레드시트에서 월별 시트 찾기
 	async function findSheetByMonth(month: number): Promise<string | null> {
@@ -113,18 +237,17 @@
 		}
 	}
 
-	async function fetchTableData(targetMonth?: number) {
+	async function fetchTableData() {
 		if (!spreadsheetId || !session?.accessToken) return;
 
 		isLoading = true;
 		error = '';
 
 		try {
-			const monthToFetch = targetMonth || currentMonth;
-			const sheetName = await findSheetByMonth(monthToFetch);
+			const sheetName = await findSheetByMonth(currentMonth);
 			
 			if (!sheetName) {
-				throw new Error(`${monthToFetch}월에 해당하는 시트를 찾을 수 없습니다.`);
+				throw new Error(`${currentMonth}월에 해당하는 시트를 찾을 수 없습니다.`);
 			}
 
 			const queryParams = new URLSearchParams({
@@ -140,7 +263,15 @@
 			});
 
 			if (!response.ok) {
-				const errorData = await response.json();
+				const errorData = await response.json().catch(() => ({}));
+				
+				// 토큰 만료 시 페이지 새로고침으로 자동 재인증
+				if (response.status === 401 && errorData.needsRefresh) {
+					alert('세션이 만료되었습니다. 페이지를 새로고침합니다.');
+					window.location.reload();
+					return;
+				}
+				
 				throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
 			}
 
@@ -155,27 +286,140 @@
 		}
 	}
 
+	// Google Picker를 통한 수동 스프레드시트 선택
+	function showSpreadsheetPicker(targetYear: number) {
+		// Google Picker API를 통해 스프레드시트 선택창 띄우기
+		if (googlePicker && googlePicker.picker) {
+			const picker = new googlePicker.picker.PickerBuilder()
+				.addView(new googlePicker.picker.DocsView(googlePicker.picker.ViewId.SPREADSHEETS))
+				.setOAuthToken(session?.accessToken)
+				.setCallback((data: any) => {
+					if (data.action === googlePicker.picker.Action.PICKED) {
+						const file = data.docs[0];
+						if (file.name.includes(targetYear.toString()) && file.name.includes('가계부')) {
+							spreadsheetId = file.id;
+							console.log(`Selected spreadsheet: ${file.name} (ID: ${file.id})`);
+							
+							// 월과 연도 업데이트 후 데이터 로드
+							if (targetYear < currentYear) {
+								currentMonth = 12;
+							} else {
+								currentMonth = 1;
+							}
+							currentYear = targetYear;
+							fetchTableData();
+						} else {
+							alert(`${targetYear}년 가계부 스프레드시트를 선택해주세요.`);
+						}
+					}
+				})
+				.build();
+			picker.setVisible(true);
+		} else {
+			alert('Google Picker를 사용할 수 없습니다. 수동으로 스프레드시트를 선택해주세요.');
+		}
+	}
+
 	// 이전달로 이동
-	function goToPreviousMonth() {
+	async function goToPreviousMonth() {
 		if (currentMonth === 1) {
-			currentMonth = 12;
-			currentYear = currentYear - 1;
+			// 연도 변경 시 새로운 스프레드시트 찾기
+			const previousYear = currentYear - 1;
+			const newSpreadsheetId = await findSpreadsheetByYear(previousYear);
+			
+			if (newSpreadsheetId) {
+				// 새로운 스프레드시트로 변경
+				spreadsheetId = newSpreadsheetId;
+				currentMonth = 12;
+				currentYear = previousYear;
+			} else {
+				// 자동 검색 실패 시 사용자에게 수동 선택 요청
+				if (confirm(`${previousYear}년 스프레드시트를 자동으로 찾을 수 없습니다.\n수동으로 선택하시겠습니까?`)) {
+					showSpreadsheetPicker(previousYear);
+					return;
+				} else {
+					error = `${previousYear}년 스프레드시트를 찾을 수 없습니다.`;
+					return;
+				}
+			}
 		} else {
 			currentMonth = currentMonth - 1;
 		}
-		fetchTableData(currentMonth);
+		await fetchTableData();
 	}
 
 	// 다음달로 이동
-	function goToNextMonth() {
+	async function goToNextMonth() {
 		if (currentMonth === 12) {
-			currentMonth = 1;
-			currentYear = currentYear + 1;
+			// 연도 변경 시 새로운 스프레드시트 찾기
+			const nextYear = currentYear + 1;
+			const newSpreadsheetId = await findSpreadsheetByYear(nextYear);
+			
+			if (newSpreadsheetId) {
+				// 새로운 스프레드시트로 변경
+				spreadsheetId = newSpreadsheetId;
+				currentMonth = 1;
+				currentYear = nextYear;
+			} else {
+				// 자동 검색 실패 시 사용자에게 수동 선택 요청
+				if (confirm(`${nextYear}년 스프레드시트를 자동으로 찾을 수 없습니다.\n수동으로 선택하시겠습니까?`)) {
+					showSpreadsheetPicker(nextYear);
+					return;
+				} else {
+					error = `${nextYear}년 스프레드시트를 찾을 수 없습니다.`;
+					return;
+				}
+			}
 		} else {
 			currentMonth = currentMonth + 1;
 		}
-		fetchTableData(currentMonth);
+		await fetchTableData();
 	}
+
+	// 년도/월 선택 모달 열기
+	function openDatePicker() {
+		selectedYear = currentYear;
+		selectedMonth = currentMonth;
+		monthPickerValue = `${currentYear}-${currentMonth.toString().padStart(2, '0')}`;
+		showDatePicker = true;
+	}
+
+	// 년도/월 선택 모달 닫기
+	function closeDatePicker() {
+		showDatePicker = false;
+	}
+
+	// 년도 변경 함수
+	function changeYear(delta: number) {
+		selectedYear += delta;
+	}
+
+	// 월 선택 함수 - 바로 해당 월로 이동
+	async function selectMonth(month: number) {
+		showDatePicker = false;
+		
+		// 선택된 년도가 현재 년도와 다르면 스프레드시트를 변경해야 함
+		if (selectedYear !== currentYear) {
+			const foundSpreadsheetId = await findSpreadsheetByYear(selectedYear);
+			if (foundSpreadsheetId) {
+				spreadsheetId = foundSpreadsheetId;
+				currentYear = selectedYear;
+				currentMonth = month;
+			} else {
+				// 자동 검색 실패 시 수동 선택 요청
+				showSpreadsheetPicker(selectedYear);
+				return;
+			}
+		} else {
+			// 같은 년도면 월만 변경
+			currentMonth = month;
+		}
+		
+		// 데이터 갱신
+		await fetchTableData();
+	}
+
+
 
 
 	// 셀 값이 비어있는지 확인하는 함수
@@ -254,18 +498,18 @@
 		</div>
 		<div class="month-navigation">
 			<button 
-				onclick={goToPreviousMonth} 
+				onclick={() => goToPreviousMonth()} 
 				class="nav-btn prev-btn"
 				disabled={isLoading || !canGoPrevious}
 				title="이전 달"
 			>
 				◀ 이전달
 			</button>
-			<div class="current-month-indicator">
+			<button class="current-month-indicator" onclick={openDatePicker} title="년도/월 선택">
 				{currentYear}년 {monthNames[currentMonth - 1]}
-			</div>
+			</button>
 			<button 
-				onclick={goToNextMonth} 
+				onclick={() => goToNextMonth()} 
 				class="nav-btn next-btn"
 				disabled={isLoading || !canGoNext}
 				title="다음 달"
@@ -359,6 +603,40 @@
 	</div>
 </div>
 
+<!-- 년도/월 선택 모달 -->
+{#if showDatePicker}
+	<div class="month-picker-overlay" onclick={closeDatePicker}>
+		<div class="month-picker-modal" onclick={(e) => e.stopPropagation()}>
+			<div class="month-picker-header">
+				<h3>년도/월 선택</h3>
+				<button class="month-picker-close" onclick={closeDatePicker}>×</button>
+			</div>
+			
+			<div class="month-picker-content">
+				<!-- 년도 선택 -->
+				<div class="year-selector">
+					<button class="year-nav-btn" onclick={() => changeYear(-1)}>◀</button>
+					<span class="current-year">{selectedYear}년</span>
+					<button class="year-nav-btn" onclick={() => changeYear(1)}>▶</button>
+				</div>
+				
+				<!-- 월 그리드 -->
+				<div class="months-container">
+					{#each monthNames as monthName, index}
+						<button 
+							class="month-btn" 
+							class:active={currentYear === selectedYear && currentMonth === index + 1}
+							onclick={() => selectMonth(index + 1)}
+						>
+							{monthName}
+						</button>
+					{/each}
+				</div>
+			</div>
+		</div>
+	</div>
+{/if}
+
 <style>
 	.table-container {
 		margin-top: 1.5rem;
@@ -445,6 +723,15 @@
 		font-size: 0.8rem;
 		min-width: 120px;
 		text-align: center;
+		cursor: pointer;
+		transition: all 0.2s ease;
+	}
+
+	.current-month-indicator:hover {
+		background: rgba(33, 150, 243, 0.15);
+		border-color: rgba(33, 150, 243, 0.3);
+		transform: translateY(-1px);
+		box-shadow: 0 2px 4px rgba(33, 150, 243, 0.2);
 	}
 
 	.error-message {
@@ -639,6 +926,174 @@
 		font-size: 0.75rem;
 	}
 
+	/* 모달 스타일 */
+	.modal-overlay {
+		position: fixed;
+		top: 0;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		background: rgba(0, 0, 0, 0.5);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		z-index: 1000;
+	}
+
+	.date-picker-modal {
+		background: white;
+		border-radius: 12px;
+		box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+		width: 400px;
+		max-width: 90vw;
+		overflow: hidden;
+		animation: modalSlideIn 0.3s ease-out;
+	}
+
+	@keyframes modalSlideIn {
+		from {
+			opacity: 0;
+			transform: scale(0.9) translateY(-20px);
+		}
+		to {
+			opacity: 1;
+			transform: scale(1) translateY(0);
+		}
+	}
+
+	.modal-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		padding: 1.5rem;
+		border-bottom: 1px solid #e0e0e0;
+		background: #f8f9fa;
+	}
+
+	.modal-header h3 {
+		margin: 0;
+		color: #333;
+		font-size: 1.2rem;
+		font-weight: 600;
+	}
+
+	.close-btn {
+		background: none;
+		border: none;
+		font-size: 1.2rem;
+		color: #666;
+		cursor: pointer;
+		padding: 0.25rem;
+		border-radius: 4px;
+		transition: all 0.2s ease;
+	}
+
+	.close-btn:hover {
+		background: rgba(0, 0, 0, 0.1);
+		color: #333;
+	}
+
+	.modal-content {
+		padding: 0;
+	}
+
+	.month-picker-container {
+		margin-bottom: 1.5rem;
+	}
+
+	.month-picker-container label {
+		display: block;
+		margin-bottom: 0.75rem;
+		color: #555;
+		font-weight: 500;
+		font-size: 0.95rem;
+		text-align: center;
+	}
+
+	.month-picker-input {
+		width: 100%;
+		padding: 1rem;
+		border: 2px solid #ddd;
+		border-radius: 8px;
+		background: white;
+		font-size: 1.1rem;
+		color: #333;
+		cursor: pointer;
+		text-align: center;
+		font-weight: 500;
+		transition: all 0.2s ease;
+	}
+
+	.month-picker-input:focus {
+		outline: none;
+		border-color: #2196f3;
+		box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.2);
+		background: #f8f9ff;
+	}
+
+	.month-picker-input:hover {
+		border-color: #2196f3;
+		background: #fafbff;
+	}
+
+	.selected-preview {
+		padding: 1rem;
+		background: #f0f8ff;
+		border: 1px solid rgba(33, 150, 243, 0.2);
+		border-radius: 6px;
+		text-align: center;
+		color: #555;
+		font-size: 0.9rem;
+	}
+
+	.selected-preview strong {
+		color: #2196f3;
+		font-weight: 600;
+	}
+
+	.modal-footer {
+		display: flex;
+		gap: 0.75rem;
+		justify-content: flex-end;
+		padding: 1.5rem;
+		border-top: 1px solid #e0e0e0;
+		background: #f8f9fa;
+	}
+
+	.btn-primary {
+		padding: 0.75rem 1.5rem;
+		background: #2196f3;
+		color: white;
+		border: none;
+		border-radius: 6px;
+		font-weight: 500;
+		cursor: pointer;
+		transition: all 0.2s ease;
+	}
+
+	.btn-primary:hover {
+		background: #1976d2;
+		transform: translateY(-1px);
+		box-shadow: 0 2px 8px rgba(33, 150, 243, 0.3);
+	}
+
+	.btn-secondary {
+		padding: 0.75rem 1.5rem;
+		background: white;
+		color: #666;
+		border: 1px solid #ddd;
+		border-radius: 6px;
+		font-weight: 500;
+		cursor: pointer;
+		transition: all 0.2s ease;
+	}
+
+	.btn-secondary:hover {
+		background: #f5f5f5;
+		border-color: #bbb;
+		color: #333;
+	}
+
 	/* 모바일 반응형 */
 	@media (max-width: 768px) {
 		.table-header {
@@ -698,6 +1153,477 @@
 		.data-cell {
 			min-width: 50px;
 			max-width: 100px;
+		}
+
+		.date-picker-modal {
+			width: 320px;
+		}
+
+		.modal-header,
+		.modal-content,
+		.modal-footer {
+			padding: 1rem;
+		}
+
+		.month-picker-input {
+			font-size: 1rem;
+			padding: 0.875rem;
+		}
+	}
+
+	/* Custom Month Picker Styles */
+	.custom-month-picker {
+		width: 100%;
+		padding: 20px 0;
+		background-color: #ffffff;
+		border-radius: 10px;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+	}
+
+	.year-controls {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		padding: 10px 0;
+		font-size: 1.2em;
+		font-weight: bold;
+		color: #333;
+		margin-bottom: 20px;
+		width: 100%;
+	}
+
+	.year-btn {
+		background: none;
+		border: none;
+		font-size: 1.5em;
+		cursor: pointer;
+		padding: 8px 12px;
+		border-radius: 5px;
+		color: #333;
+		transition: background-color 0.2s;
+		min-width: 44px;
+		min-height: 44px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+	}
+
+	.year-btn:hover {
+		background-color: #e2eaf1;
+	}
+
+	.year-btn:active {
+		background-color: #d1d9e0;
+	}
+
+	.year-display {
+		font-size: 1.2em;
+		font-weight: bold;
+	}
+
+	.months-grid {
+		display: grid;
+		grid-template-columns: repeat(4, 1fr);
+		gap: 8px;
+		width: 100%;
+	}
+
+	.month-item {
+		padding: 12px 4px;
+		text-align: center;
+		cursor: pointer;
+		border: none;
+		border-radius: 8px;
+		background: none;
+		font-size: 0.9rem;
+		transition: background-color 0.2s, color 0.2s;
+		min-height: 44px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+	}
+
+	.month-item:hover {
+		background-color: #e2eaf1;
+	}
+
+	.month-item:active {
+		background-color: #d1d9e0;
+	}
+
+	.month-item.selected {
+		background-color: #4CAF50;
+		color: #fff;
+		font-weight: bold;
+	}
+
+	/* 모바일 반응형 스타일 */
+	@media (max-width: 768px) {
+		.modal-overlay {
+			padding: 20px 10px;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+		}
+
+		.modal-content {
+			margin: 0;
+			width: 100%;
+			max-width: 350px;
+			max-height: calc(100vh - 40px);
+			overflow-y: auto;
+		}
+
+		.custom-month-picker {
+			padding: 20px 16px;
+			max-width: none;
+		}
+
+		.year-controls {
+			padding: 12px 0;
+			margin-bottom: 20px;
+		}
+
+		.year-btn {
+			font-size: 1.4em;
+			padding: 12px 16px;
+			min-width: 50px;
+			min-height: 50px;
+		}
+
+		.year-display {
+			font-size: 1.2em;
+		}
+
+		.months-grid {
+			gap: 8px;
+		}
+
+		.month-item {
+			padding: 12px 6px;
+			font-size: 0.9rem;
+			min-height: 50px;
+		}
+	}
+
+	/* 작은 모바일 화면 (430×932 등) */
+	@media (max-width: 480px) {
+		.modal-overlay {
+			padding: 20px 15px;
+		}
+
+		.modal-content {
+			width: 100%;
+			max-width: calc(100vw - 30px);
+			max-height: none;
+		}
+
+		.custom-month-picker {
+			padding: 16px 0;
+			width: 100%;
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+		}
+
+		.year-controls {
+			padding: 8px 0;
+			margin-bottom: 12px;
+		}
+
+		.year-btn {
+			font-size: 1.2em;
+			padding: 8px 12px;
+			min-width: 40px;
+			min-height: 40px;
+		}
+
+		.year-display {
+			font-size: 1em;
+		}
+
+		.months-grid {
+			gap: 4px;
+		}
+
+		.month-item {
+			padding: 8px 2px;
+			font-size: 0.75rem;
+			min-height: 40px;
+			border-radius: 6px;
+		}
+	}
+
+	/* 매우 작은 화면 대응 */
+	@media (max-width: 360px) {
+		.modal-overlay {
+			padding: 15px 10px;
+		}
+
+		.modal-content {
+			width: 100%;
+			max-width: calc(100vw - 20px);
+			max-height: none;
+		}
+
+		.custom-month-picker {
+			padding: 16px 0;
+			width: 100%;
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+		}
+
+		.year-controls {
+			padding: 6px 0;
+			margin-bottom: 10px;
+		}
+
+		.year-btn {
+			font-size: 1.1em;
+			padding: 6px 10px;
+			min-width: 36px;
+			min-height: 36px;
+		}
+
+		.year-display {
+			font-size: 0.9em;
+		}
+
+		.months-grid {
+			gap: 3px;
+		}
+
+		.month-item {
+			padding: 6px 1px;
+			font-size: 0.7rem;
+			min-height: 36px;
+			border-radius: 4px;
+		}
+	}
+
+	/* Month Picker Modal Styles */
+	.month-picker-overlay {
+		position: fixed;
+		top: 0;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		background: rgba(0, 0, 0, 0.5);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		z-index: 1000;
+		padding: 20px;
+	}
+
+	.month-picker-modal {
+		background: white;
+		border-radius: 12px;
+		width: 100%;
+		max-width: 320px;
+		box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+		overflow: hidden;
+	}
+
+	.month-picker-header {
+		padding: 16px 20px;
+		border-bottom: 1px solid #e5e5e5;
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		background: #f8f9fa;
+	}
+
+	.month-picker-header h3 {
+		margin: 0;
+		font-size: 1.1rem;
+		font-weight: 600;
+		color: #333;
+	}
+
+	.month-picker-close {
+		background: none;
+		border: none;
+		font-size: 1.5rem;
+		cursor: pointer;
+		padding: 4px;
+		border-radius: 4px;
+		color: #666;
+		width: 28px;
+		height: 28px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+	}
+
+	.month-picker-close:hover {
+		background: #e9ecef;
+		color: #333;
+	}
+
+	.month-picker-content {
+		padding: 20px;
+	}
+
+	.year-selector {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		margin-bottom: 20px;
+		padding: 8px 0;
+	}
+
+	.year-nav-btn {
+		background: #f1f3f4;
+		border: none;
+		border-radius: 8px;
+		width: 40px;
+		height: 40px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		cursor: pointer;
+		font-size: 1.2rem;
+		color: #333;
+		transition: all 0.2s ease;
+	}
+
+	.year-nav-btn:hover {
+		background: #e8eaed;
+		transform: scale(1.05);
+	}
+
+	.year-nav-btn:active {
+		transform: scale(0.95);
+	}
+
+	.current-year {
+		font-size: 1.2rem;
+		font-weight: 600;
+		color: #333;
+	}
+
+	.months-container {
+		display: grid;
+		grid-template-columns: repeat(4, 1fr);
+		gap: 8px;
+	}
+
+	.month-btn {
+		background: #f8f9fa;
+		border: none;
+		border-radius: 8px;
+		padding: 12px 4px;
+		font-size: 0.9rem;
+		cursor: pointer;
+		transition: all 0.2s ease;
+		color: #333;
+		font-weight: 500;
+		min-height: 44px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+	}
+
+	.month-btn:hover {
+		background: #e9ecef;
+		transform: translateY(-1px);
+	}
+
+	.month-btn:active {
+		transform: translateY(0);
+	}
+
+	.month-btn.active {
+		background: #007bff;
+		color: white;
+		font-weight: 600;
+		box-shadow: 0 2px 8px rgba(0, 123, 255, 0.3);
+	}
+
+	.month-btn.active:hover {
+		background: #0056b3;
+		transform: translateY(-1px);
+	}
+
+	/* 모바일 반응형 */
+	@media (max-width: 480px) {
+		.month-picker-overlay {
+			padding: 15px;
+		}
+
+		.month-picker-modal {
+			max-width: 100%;
+		}
+
+		.month-picker-header {
+			padding: 12px 16px;
+		}
+
+		.month-picker-header h3 {
+			font-size: 1rem;
+		}
+
+		.month-picker-content {
+			padding: 16px;
+		}
+
+		.year-selector {
+			margin-bottom: 16px;
+		}
+
+		.year-nav-btn {
+			width: 36px;
+			height: 36px;
+			font-size: 1.1rem;
+		}
+
+		.current-year {
+			font-size: 1.1rem;
+		}
+
+		.months-container {
+			gap: 6px;
+		}
+
+		.month-btn {
+			padding: 10px 2px;
+			font-size: 0.8rem;
+			min-height: 40px;
+		}
+	}
+
+	/* 매우 작은 화면 */
+	@media (max-width: 360px) {
+		.month-picker-overlay {
+			padding: 10px;
+		}
+
+		.month-picker-content {
+			padding: 12px;
+		}
+
+		.year-nav-btn {
+			width: 32px;
+			height: 32px;
+			font-size: 1rem;
+		}
+
+		.current-year {
+			font-size: 1rem;
+		}
+
+		.months-container {
+			gap: 4px;
+		}
+
+		.month-btn {
+			padding: 8px 2px;
+			font-size: 0.75rem;
+			min-height: 36px;
 		}
 	}
 </style>
