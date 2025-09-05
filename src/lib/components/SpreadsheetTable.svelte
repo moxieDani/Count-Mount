@@ -483,27 +483,6 @@
 				</button>
 			</div>
 		</div>
-		<div class="month-navigation">
-			<button 
-				onclick={() => goToPreviousMonth()} 
-				class="nav-btn prev-btn"
-				disabled={isLoading || !canGoPrevious}
-				title="이전 달"
-			>
-				◀ 
-			</button>
-			<button class="current-month-indicator" onclick={openDatePicker} title="년도/월 선택">
-				{currentYear}년 {monthNames[currentMonth - 1]}
-			</button>
-			<button 
-				onclick={() => goToNextMonth()} 
-				class="nav-btn next-btn"
-				disabled={isLoading || !canGoNext}
-				title="다음 달"
-			>
-				 ▶
-			</button>
-		</div>
 	</div>
 
 
@@ -521,65 +500,85 @@
 				<p>데이터를 불러오는 중...</p>
 			</div>
 		{:else if tableData}
-
-				{#if tableData.values.length > 0}
-					<div class="table-wrapper">
-						<table class="data-table">
-							<thead>
-								<tr>
-									{#each tableData.headers as header, colIndex}
-										<th 
-											class="col-header"
-											style={tableData.headerFormats && tableData.headerFormats[colIndex] ? getCellStyle(tableData.headerFormats[colIndex]) : ''}
-										>
-											{header}
-										</th>
-									{/each}
-								</tr>
-							</thead>
-							<tbody>
-								{#each tableData.values as row, rowIndex}
-									{#if !isRowEmpty(row)}
-										<tr class="data-row">
-											{#each tableData.headers as _, colIndex}
-												{@const cellFormat = tableData.cellFormats && tableData.cellFormats[rowIndex] && tableData.cellFormats[rowIndex][colIndex]}
-												{@const cellStyle = getCellStyle(cellFormat)}
-												<td 
-													class="data-cell" 
-													class:empty-cell={isCellEmpty(row[colIndex])}
-													class:ac-column={isACColumn(colIndex)}
-													style={cellStyle}
-												>
-													{formatCellValue(row[colIndex])}
-												</td>
-											{/each}
-										</tr>
-									{/if}
+			{#if tableData.values.length > 0}
+				<div class="month-navigation">
+					<button 
+						onclick={() => goToPreviousMonth()} 
+						class="nav-btn prev-btn"
+						disabled={isLoading || !canGoPrevious}
+						title="이전 달"
+					>
+						◀ 
+					</button>
+					<button class="current-month-indicator" onclick={openDatePicker} title="년도/월 선택">
+						{currentYear}년 {monthNames[currentMonth - 1]}
+					</button>
+					<button 
+						onclick={() => goToNextMonth()} 
+						class="nav-btn next-btn"
+						disabled={isLoading || !canGoNext}
+						title="다음 달"
+					>
+						▶
+					</button>
+				</div>
+				<div class="table-wrapper">
+					<table class="data-table">
+						<thead>
+							<tr>
+								{#each tableData.headers as header, colIndex}
+									<th 
+										class="col-header"
+										style={tableData.headerFormats && tableData.headerFormats[colIndex] ? getCellStyle(tableData.headerFormats[colIndex]) : ''}
+									>
+										{header}
+									</th>
 								{/each}
-							</tbody>
-						</table>
-					</div>
-				{:else}
-					<div class="empty-data">
-						<div class="empty-icon">📋</div>
-						<h4>데이터가 없습니다</h4>
-						<p>선택한 범위 ({range})에 데이터가 없거나 비어있습니다.</p>
-						<div class="empty-actions">
-							<button onclick={fetchTableData} class="refresh-data-btn">
-								🔄 다시 확인
-							</button>
-						</div>
-					</div>
-				{/if}
-
-				<div class="table-footer">
-					<div class="metadata-info">
-						<small>
-							실제 범위: {tableData.metadata.actualRange} | 
-							업데이트: {new Date().toLocaleString('ko-KR')}
-						</small>
+							</tr>
+						</thead>
+						<tbody>
+							{#each tableData.values as row, rowIndex}
+								{#if !isRowEmpty(row)}
+									<tr class="data-row">
+										{#each tableData.headers as _, colIndex}
+											{@const cellFormat = tableData.cellFormats && tableData.cellFormats[rowIndex] && tableData.cellFormats[rowIndex][colIndex]}
+											{@const cellStyle = getCellStyle(cellFormat)}
+											<td 
+												class="data-cell" 
+												class:empty-cell={isCellEmpty(row[colIndex])}
+												class:ac-column={isACColumn(colIndex)}
+												style={cellStyle}
+											>
+												{formatCellValue(row[colIndex])}
+											</td>
+										{/each}
+									</tr>
+								{/if}
+							{/each}
+						</tbody>
+					</table>
+				</div>
+			{:else}
+				<div class="empty-data">
+					<div class="empty-icon">📋</div>
+					<h4>데이터가 없습니다</h4>
+					<p>선택한 범위 ({range})에 데이터가 없거나 비어있습니다.</p>
+					<div class="empty-actions">
+						<button onclick={fetchTableData} class="refresh-data-btn">
+							🔄 다시 확인
+						</button>
 					</div>
 				</div>
+			{/if}
+
+			<div class="table-footer">
+				<div class="metadata-info">
+					<small>
+						실제 범위: {tableData.metadata.actualRange} | 
+						업데이트: {new Date().toLocaleString('ko-KR')}
+					</small>
+				</div>
+			</div>
 		{:else}
 			<div class="no-data-message">
 				<div class="no-data-icon">📋</div>
