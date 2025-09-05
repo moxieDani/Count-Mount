@@ -88,14 +88,10 @@
 		try {
 			console.log(`Searching for ${targetYear} spreadsheet in shared drives...`);
 			
-			// 여러 가지 패턴으로 검색
+			// 정확한 패턴만 검색 - '연도 가계부' 형태만
 			const searchPatterns = [
-				`name contains '${targetYear} 가계부'`,
-				`name contains '${targetYear}가계부'`,
-				`name contains '가계부 ${targetYear}'`,
 				`name:'${targetYear} 가계부'`,
-				`name:'${targetYear}가계부'`,
-				`name contains '${targetYear}'`
+				`name:'${targetYear}가계부'`
 			];
 			
 			// 각 패턴으로 검색 (공유 드라이브 포함)
@@ -140,11 +136,10 @@
 						
 						for (const file of fallbackFiles) {
 							console.log(`Checking personal drive file: ${file.name} (ID: ${file.id})`);
+							// 정확한 패턴 매칭만 허용
 							if (file.name && (
-								file.name.includes(`${targetYear} 가계부`) ||
-								file.name.includes(`${targetYear}가계부`) ||
-								file.name.includes(`가계부 ${targetYear}`) ||
-								(file.name.includes(targetYear.toString()) && file.name.includes('가계부'))
+								file.name === `${targetYear} 가계부` ||
+								file.name === `${targetYear}가계부`
 							)) {
 								console.log(`Found matching spreadsheet in personal drive: ${file.name}`);
 								return file.id;
@@ -159,14 +154,12 @@
 				
 				console.log(`Found ${files.length} files with pattern: ${pattern}`);
 				
-				// 검색 결과에서 가장 적합한 파일 찾기
+				// 검색 결과에서 정확한 이름 매칭만 허용
 				for (const file of files) {
 					console.log(`Checking file: ${file.name} (ID: ${file.id})`);
 					if (file.name && (
-						file.name.includes(`${targetYear} 가계부`) ||
-						file.name.includes(`${targetYear}가계부`) ||
-						file.name.includes(`가계부 ${targetYear}`) ||
-						(file.name.includes(targetYear.toString()) && file.name.includes('가계부'))
+						file.name === `${targetYear} 가계부` ||
+						file.name === `${targetYear}가계부`
 					)) {
 						console.log(`Found matching spreadsheet in shared drive: ${file.name}`);
 						return file.id;
@@ -225,16 +218,29 @@
 	}
 
 	async function fetchTableData() {
-		if (!spreadsheetId || !session?.accessToken) return;
+		if (!session?.accessToken) return;
 
 		isLoading = true;
 		error = '';
 
 		try {
+			// 1. 먼저 해당 년도의 스프레드시트가 존재하는지 확인
+			const yearSpreadsheetId = await findSpreadsheetByYear(currentYear);
+			if (!yearSpreadsheetId) {
+				error = `${currentYear}년 스프레드시트를 찾을 수 없습니다.`;
+				return;
+			}
+
+			// 2. 스프레드시트 ID 업데이트 (찾은 스프레드시트가 현재와 다를 수 있음)
+			if (spreadsheetId !== yearSpreadsheetId) {
+				spreadsheetId = yearSpreadsheetId;
+			}
+
+			// 3. 해당 월의 시트가 존재하는지 확인
 			const sheetName = await findSheetByMonth(currentMonth);
-			
 			if (!sheetName) {
-				throw new Error(`${currentMonth}월에 해당하는 시트를 찾을 수 없습니다.`);
+				error = `${currentYear}년 스프레드시트에서 ${currentMonth}월에 해당하는 시트를 찾을 수 없습니다.`;
+				return;
 			}
 
 			const queryParams = new URLSearchParams({
@@ -259,7 +265,8 @@
 					return;
 				}
 				
-				throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+				error = errorData.error || `HTTP ${response.status}: ${response.statusText}`;
+				return;
 			}
 
 			const data = await response.json();
@@ -296,14 +303,14 @@
 							currentYear = targetYear;
 							fetchTableData();
 						} else {
-							alert(`${targetYear}년 가계부 스프레드시트를 선택해주세요.`);
+							alert(`'${targetYear}년 가계부' 파일이 없습니다.`);
 						}
 					}
 				})
 				.build();
 			picker.setVisible(true);
 		} else {
-			alert('Google Picker를 사용할 수 없습니다. 수동으로 스프레드시트를 선택해주세요.');
+			alert('Google Picker를 사용할 수 없습니다.');
 		}
 	}
 
@@ -320,14 +327,9 @@
 				currentMonth = 12;
 				currentYear = previousYear;
 			} else {
-				// 자동 검색 실패 시 사용자에게 수동 선택 요청
-				if (confirm(`${previousYear}년 스프레드시트를 자동으로 찾을 수 없습니다.\n수동으로 선택하시겠습니까?`)) {
-					showSpreadsheetPicker(previousYear);
-					return;
-				} else {
-					error = `${previousYear}년 스프레드시트를 찾을 수 없습니다.`;
-					return;
-				}
+				// 자동 검색 실패 시 사용자에게 표시
+				error = `'${previousYear}년 가계부' 파일이 없습니다.`;
+				return;
 			}
 		} else {
 			currentMonth = currentMonth - 1;
@@ -348,14 +350,9 @@
 				currentMonth = 1;
 				currentYear = nextYear;
 			} else {
-				// 자동 검색 실패 시 사용자에게 수동 선택 요청
-				if (confirm(`${nextYear}년 스프레드시트를 자동으로 찾을 수 없습니다.\n수동으로 선택하시겠습니까?`)) {
-					showSpreadsheetPicker(nextYear);
-					return;
-				} else {
-					error = `${nextYear}년 스프레드시트를 찾을 수 없습니다.`;
-					return;
-				}
+				// 자동 검색 실패 시 사용자에게 표시
+				error = `'${nextYear}년 가계부' 파일이 없습니다.`;
+				return;
 			}
 		} else {
 			currentMonth = currentMonth + 1;
@@ -384,18 +381,20 @@
 				spreadsheetId = foundSpreadsheetId;
 				currentYear = selectedYear;
 				currentMonth = selectedMonth;
+				// 데이터 갱신
+				await fetchTableData();
 			} else {
-				// 자동 검색 실패 시 수동 선택 요청
-				showSpreadsheetPicker(selectedYear);
+				// 스프레드시트를 찾을 수 없는 경우 에러 메시지 표시
+				error = `'${selectedYear}년 가계부' 파일이 없습니다.`;
+				// 년도/월 상태는 변경하지 않고 기존 상태 유지
 				return;
 			}
 		} else {
 			// 같은 년도면 월만 변경
 			currentMonth = selectedMonth;
+			// 데이터 갱신
+			await fetchTableData();
 		}
-		
-		// 데이터 갱신
-		await fetchTableData();
 	}
 
 
@@ -489,7 +488,7 @@
 	{#if error}
 		<div class="error-message">
 			❌ {error}
-			<button onclick={fetchTableData} class="retry-btn">다시 시도</button>
+			<button onclick={() => error = ''} class="close-error-btn">닫기</button>
 		</div>
 	{/if}
 
@@ -500,44 +499,45 @@
 				<p>데이터를 불러오는 중...</p>
 			</div>
 		{:else if tableData}
-			{#if tableData.values.length > 0}
-				<div class="month-navigation">
-					<button 
-						onclick={() => goToPreviousMonth()} 
-						class="nav-btn prev-btn"
-						disabled={isLoading || !canGoPrevious}
-						title="이전 달"
-					>
-						◀ 이전 달
-					</button>
-					<button class="current-month-indicator" onclick={openDatePicker} title="년도/월 선택">
-						{currentYear}년 {monthNames[currentMonth - 1]}
-					</button>
-					<button 
-						onclick={() => goToNextMonth()} 
-						class="nav-btn next-btn"
-						disabled={isLoading || !canGoNext}
-						title="다음 달"
-					>
-						다음 달 ▶
-					</button>
-				</div>
-				<div class="table-wrapper">
-					<table class="data-table">
-						<thead>
-							<tr>
-								{#each tableData.headers as header, colIndex}
-									<th 
-										class="col-header"
-										class:date-column={header === '날짜'}
-										style={tableData.headerFormats && tableData.headerFormats[colIndex] ? getCellStyle(tableData.headerFormats[colIndex]) : ''}
-									>
-										{header}
-									</th>
-								{/each}
-							</tr>
-						</thead>
-						<tbody>
+			<div class="month-navigation">
+				<button 
+					onclick={() => goToPreviousMonth()} 
+					class="nav-btn prev-btn"
+					disabled={isLoading || !canGoPrevious}
+					title="이전 달"
+				>
+					◀ 이전 달
+				</button>
+				<button class="current-month-indicator" onclick={openDatePicker} title="년도/월 선택">
+					{currentYear}년 {monthNames[currentMonth - 1]}
+				</button>
+				<button 
+					onclick={() => goToNextMonth()} 
+					class="nav-btn next-btn"
+					disabled={isLoading || !canGoNext}
+					title="다음 달"
+				>
+					다음 달 ▶
+				</button>
+			</div>
+			
+			<div class="table-wrapper">
+				<table class="data-table">
+					<thead>
+						<tr>
+							{#each tableData.headers as header, colIndex}
+								<th 
+									class="col-header"
+									class:date-column={header === '날짜'}
+									style={tableData.headerFormats && tableData.headerFormats[colIndex] ? getCellStyle(tableData.headerFormats[colIndex]) : ''}
+								>
+									{header}
+								</th>
+							{/each}
+						</tr>
+					</thead>
+					<tbody>
+						{#if tableData.values.length > 0}
 							{#each tableData.values as row, rowIndex}
 								{#if !isRowEmpty(row)}
 									<tr class="data-row">
@@ -557,21 +557,25 @@
 									</tr>
 								{/if}
 							{/each}
-						</tbody>
-					</table>
-				</div>
-			{:else}
-				<div class="empty-data">
-					<div class="empty-icon">📋</div>
-					<h4>데이터가 없습니다</h4>
-					<p>선택한 범위 ({range})에 데이터가 없거나 비어있습니다.</p>
-					<div class="empty-actions">
-						<button onclick={fetchTableData} class="refresh-data-btn">
-							🔄 다시 확인
-						</button>
-					</div>
-				</div>
-			{/if}
+						{:else}
+							<!-- 데이터가 비어있을 때 빈 행들을 표시 -->
+							{#each Array(10) as _, rowIndex}
+								<tr class="data-row empty-row">
+									{#each tableData.headers as _, colIndex}
+										<td 
+											class="data-cell empty-cell"
+											class:ac-column={isACColumn(colIndex)}
+											class:date-column={tableData.headers[colIndex] === '날짜'}
+										>
+											-
+										</td>
+									{/each}
+								</tr>
+							{/each}
+						{/if}
+					</tbody>
+				</table>
+			</div>
 
 			<div class="table-footer">
 				<div class="metadata-info">
@@ -728,19 +732,19 @@
 		align-items: center;
 	}
 
-	.retry-btn, .refresh-data-btn {
+	.close-error-btn {
 		padding: 0.5rem 1rem;
-		border: 1px solid #ff6b6b;
+		border: 1px solid #666;
 		border-radius: 4px;
 		background: white;
-		color: #ff6b6b;
+		color: #666;
 		font-size: 0.875rem;
 		cursor: pointer;
 		transition: all 0.2s ease;
 	}
 
-	.retry-btn:hover, .refresh-data-btn:hover {
-		background: #ff6b6b;
+	.close-error-btn:hover {
+		background: #666;
 		color: white;
 	}
 
@@ -864,6 +868,21 @@
 
 	.data-row:hover .data-cell {
 		background: #e3f2fd;
+	}
+
+	/* 빈 행 스타일 */
+	.empty-row .data-cell {
+		background: #fafafa !important;
+		color: #ccc;
+		font-style: italic;
+	}
+
+	.empty-row:nth-child(even) .data-cell {
+		background: #f5f5f5 !important;
+	}
+
+	.empty-row:hover .data-cell {
+		background: #f0f0f0 !important;
 	}
 
 	/* AC 컬럼 특별 스타일링 */
