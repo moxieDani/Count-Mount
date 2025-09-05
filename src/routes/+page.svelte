@@ -1,65 +1,104 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { page } from '$app/state'
-	import { browser } from '$app/environment';
 	import LoginButton from '$lib/components/LoginButton.svelte'
 	import HeaderAuth from '$lib/components/HeaderAuth.svelte'
-	import GooglePicker from '$lib/components/GooglePicker.svelte'
-	import SheetsList from '$lib/components/SheetsList.svelte'
+	import SpreadsheetTable from '$lib/components/SpreadsheetTable.svelte'
 
 	let session = $derived(page.data.session);
+	let currentSpreadsheetId = $state<string>('');
+	let isLoading = $state(false);
+	let error = $state('');
 
-	let selectedFile = $state<{id: string, name: string, url: string, mimeType: string} | null>(null);
+	// 자동 스프레드시트 찾기 함수
+	async function findCurrentYearSpreadsheet(): Promise<string | null> {
+		if (!session?.accessToken) return null;
 
-	const STORAGE_KEY = 'count-mount-selected-spreadsheet';
-
-	onMount(() => {
-		// 페이지 로드 시 localStorage에서 선택된 파일 정보 복원
-		loadSelectedFile();
-	});
-
-	function loadSelectedFile() {
-		if (!browser) return;
-		
 		try {
-			const stored = localStorage.getItem(STORAGE_KEY);
-			if (stored) {
-				const fileInfo = JSON.parse(stored);
-				selectedFile = fileInfo;
-				console.log('Restored selected spreadsheet from storage:', fileInfo);
+			const currentYear = new Date().getFullYear();
+			console.log(`Searching for ${currentYear} spreadsheet...`);
+			
+			// 여러 가지 패턴으로 검색
+			const searchPatterns = [
+				`name contains '${currentYear} 가계부'`,
+				`name contains '${currentYear}가계부'`,
+				`name contains '가계부 ${currentYear}'`,
+				`name:'${currentYear} 가계부'`,
+				`name:'${currentYear}가계부'`,
+				`name contains '${currentYear}'`
+			];
+			
+			// 각 패턴으로 검색 (공유 드라이브 포함)
+			for (const pattern of searchPatterns) {
+				const searchQuery = `${pattern} and mimeType='application/vnd.google-apps.spreadsheet'`;
+				
+				// 공유 드라이브 포함 검색
+				const searchUrl = `https://www.googleapis.com/drive/v3/files?` + 
+					`q=${encodeURIComponent(searchQuery)}&` +
+					`supportsAllDrives=true&` +
+					`includeItemsFromAllDrives=true&` +
+					`corpora=allDrives&` +
+					`orderBy=modifiedTime desc`;
+
+				const response = await fetch(searchUrl, {
+					headers: {
+						'Authorization': `Bearer ${session.accessToken}`
+					}
+				});
+
+				if (response.ok) {
+					const data = await response.json();
+					const files = data.files || [];
+					
+					// 검색 결과에서 가장 적합한 파일 찾기
+					for (const file of files) {
+						console.log(`Checking file: ${file.name} (ID: ${file.id})`);
+						if (file.name && (
+							file.name.includes(`${currentYear} 가계부`) ||
+							file.name.includes(`${currentYear}가계부`) ||
+							file.name.includes(`가계부 ${currentYear}`) ||
+							(file.name.includes(currentYear.toString()) && file.name.includes('가계부'))
+						)) {
+							console.log(`Found matching spreadsheet: ${file.name}`);
+							return file.id;
+						}
+					}
+				}
 			}
-		} catch (error) {
-			console.error('Failed to load selected file from storage:', error);
-			// 저장된 데이터가 손상된 경우 제거
-			localStorage.removeItem(STORAGE_KEY);
+
+			return null;
+		} catch (err) {
+			console.error('Error searching for current year spreadsheet:', err);
+			return null;
 		}
 	}
 
-	function saveSelectedFile(fileInfo: {id: string, name: string, url: string, mimeType: string} | null) {
-		if (!browser) return;
-		
+	async function loadCurrentYearSpreadsheet() {
+		isLoading = true;
+		error = '';
+
 		try {
-			if (fileInfo) {
-				localStorage.setItem(STORAGE_KEY, JSON.stringify(fileInfo));
+			const spreadsheetId = await findCurrentYearSpreadsheet();
+			if (spreadsheetId) {
+				currentSpreadsheetId = spreadsheetId;
+				console.log(`Automatically loaded spreadsheet: ${spreadsheetId}`);
 			} else {
-				localStorage.removeItem(STORAGE_KEY);
+				error = `${new Date().getFullYear()}년 가계부 스프레드시트를 찾을 수 없습니다.`;
 			}
-		} catch (error) {
-			console.error('Failed to save selected file to storage:', error);
+		} catch (err) {
+			error = '스프레드시트 로드 중 오류가 발생했습니다.';
+			console.error('Error loading spreadsheet:', err);
+		} finally {
+			isLoading = false;
 		}
 	}
 
-	function handleFileSelected(fileInfo: {id: string, name: string, url: string, mimeType: string}) {
-		selectedFile = fileInfo;
-		saveSelectedFile(fileInfo);
-		console.log('Selected spreadsheet:', fileInfo);
-	}
-
-	function clearSelection() {
-		selectedFile = null;
-		saveSelectedFile(null);
-		console.log('Cleared spreadsheet selection');
-	}
+	// 세션이 변경될 때마다 자동으로 스프레드시트 로드
+	$effect(async () => {
+		if (session?.accessToken && !currentSpreadsheetId) {
+			await loadCurrentYearSpreadsheet();
+		}
+	});
 </script>
 
 {#if session}
@@ -67,75 +106,30 @@
 		<div class="header">
 			<h1>Count-Mount</h1>
 			<div class="header-actions">
-				{#if selectedFile}
-					<button onclick={clearSelection} class="btn-secondary">
-						새 스프레드시트 선택
-					</button>
-				{/if}
 				<HeaderAuth />
 			</div>
 		</div>
 		<div class="content">
-			{#if !selectedFile}
-				<GooglePicker onFileSelected={handleFileSelected} />
-			{:else}
-				<div class="selected-file-section">
-					<h2>선택된 스프레드시트</h2>
-					<div class="file-info-card">
-						<div class="file-header">
-							<div class="file-icon">📊</div>
-							<div class="file-details">
-								<h3 class="file-name">{selectedFile.name}</h3>
-								<p class="file-path">파일 ID: <code>{selectedFile.id}</code></p>
-								<p class="file-url">
-									<a href={selectedFile.url} target="_blank" rel="noopener noreferrer">
-										Google Sheets에서 열기 ↗
-									</a>
-								</p>
-							</div>
-						</div>
-						
-						<div class="file-metadata">
-							<div class="metadata-item">
-								<strong>파일 형식:</strong> {selectedFile.mimeType}
-							</div>
-							<div class="metadata-item">
-								<strong>파일 URL:</strong> 
-								<div class="url-container">
-									<input 
-										type="text" 
-										readonly 
-										value={selectedFile.url} 
-										class="url-input"
-									/>
-									<button 
-										onclick={() => selectedFile && navigator.clipboard.writeText(selectedFile.url)}
-										class="copy-btn"
-										title="URL 복사"
-									>
-										📋
-									</button>
-								</div>
-							</div>
-						</div>
-
-						<div class="next-steps">
-							<h4>다음 단계</h4>
-							<p>이제 이 스프레드시트의 특정 셀 영역에 값을 입력할 수 있는 기능을 구현할 예정입니다.</p>
-							<ul>
-								<li>시트 이름 선택</li>
-								<li>셀 범위 지정 (예: A1:C10)</li>
-								<li>데이터 입력 및 업데이트</li>
-							</ul>
-						</div>
-					</div>
-
-					<!-- 시트 목록 컴포넌트 추가 -->
-					<SheetsList 
-						spreadsheetId={selectedFile.id} 
-						spreadsheetName={selectedFile.name}
-					/>
+			{#if isLoading}
+				<div class="loading-section">
+					<div class="loading-spinner"></div>
+					<p>가계부 데이터를 불러오는 중...</p>
 				</div>
+			{:else if error}
+				<div class="error-section">
+					<div class="error-icon">⚠️</div>
+					<h3>오류 발생</h3>
+					<p>{error}</p>
+					<button onclick={loadCurrentYearSpreadsheet} class="retry-btn">
+						다시 시도
+					</button>
+				</div>
+			{:else if currentSpreadsheetId}
+				<SpreadsheetTable 
+					spreadsheetId={currentSpreadsheetId}
+					range="Y27:AD126"
+					headerRange="Y26:AD26"
+				/>
 			{/if}
 		</div>
 	</main>
@@ -176,22 +170,19 @@
 		gap: 1rem;
 	}
 
-	.btn-secondary {
-		padding: 0.5rem 1rem;
-		border: 1px solid rgba(255, 255, 255, 0.3);
-		border-radius: 6px;
-		background: rgb(78, 193, 116);
+	.header-actions button {
+		padding: 0.75rem 1.5rem;
+		background: #2196f3;
 		color: white;
-		font-size: 0.875rem;
+		border: none;
+		border-radius: 6px;
 		font-weight: 500;
 		cursor: pointer;
 		transition: all 0.2s ease;
-		backdrop-filter: blur(10px);
 	}
 
-	.btn-secondary:hover {
-		background: rgba(255, 255, 255, 0.3);
-		border-color: rgba(255, 255, 255, 0.5);
+	.header-actions button:hover {
+		background: #1976d2;
 		transform: translateY(-1px);
 		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 	}
@@ -202,194 +193,73 @@
 		margin: 0 auto;
 	}
 
-	.content h2 {
-		color: #333;
-		margin-bottom: 1rem;
-	}
-
-	.content p {
-		color: #666;
-		line-height: 1.6;
-	}
-
-	.welcome-section {
-		text-align: center;
-		margin-bottom: 3rem;
-	}
-
-	.welcome-section h2 {
-		color: #333;
-		font-size: 2rem;
-		margin-bottom: 1rem;
-	}
-
-	.welcome-section p {
-		font-size: 1.1rem;
-		max-width: 600px;
-		margin: 0 auto 2rem auto;
-	}
-
-	.selected-file-section {
-		max-width: 800px;
-		margin: 0 auto;
-	}
-
-	.selected-file-section h2 {
-		color: #333;
-		font-size: 1.75rem;
-		margin-bottom: 1.5rem;
-		text-align: center;
-	}
-
-	.file-info-card {
-		background: white;
-		border-radius: 16px;
-		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-		overflow: hidden;
-	}
-
-	.file-header {
+	.loading-section {
 		display: flex;
-		align-items: center;
-		gap: 1rem;
-		padding: 2rem;
-		background: linear-gradient(135deg, #f8f9ff 0%, #e3f2fd 100%);
-		border-bottom: 1px solid #e0e0e0;
-	}
-
-	.file-icon {
-		font-size: 3rem;
-		display: flex;
+		flex-direction: column;
 		align-items: center;
 		justify-content: center;
-		width: 80px;
-		height: 80px;
-		background: white;
-		border-radius: 16px;
-		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-	}
-
-	.file-details {
-		flex: 1;
-	}
-
-	.file-name {
-		margin: 0 0 0.5rem 0;
-		color: #333;
-		font-size: 1.5rem;
-		font-weight: 600;
-	}
-
-	.file-path {
-		margin: 0 0 0.5rem 0;
-		color: #666;
-		font-size: 0.9rem;
-	}
-
-	.file-path code {
-		background: rgba(0, 0, 0, 0.05);
-		padding: 0.2rem 0.4rem;
-		border-radius: 4px;
-		font-size: 0.8rem;
-		color: #333;
-		font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-	}
-
-	.file-url {
-		margin: 0;
+		padding: 4rem 2rem;
+		text-align: center;
 		color: #666;
 	}
 
-	.file-url a {
-		color: #007bff;
-		text-decoration: none;
-		font-weight: 500;
+	.loading-spinner {
+		width: 50px;
+		height: 50px;
+		border: 4px solid #f3f3f3;
+		border-top: 4px solid #2196f3;
+		border-radius: 50%;
+		animation: spin 1s linear infinite;
+		margin-bottom: 1.5rem;
 	}
 
-	.file-url a:hover {
-		text-decoration: underline;
+	@keyframes spin {
+		0% { transform: rotate(0deg); }
+		100% { transform: rotate(360deg); }
 	}
 
-	.file-metadata {
-		padding: 1.5rem 2rem;
-		background: white;
-		border-bottom: 1px solid #f0f0f0;
-	}
-
-	.metadata-item {
-		margin-bottom: 1rem;
-		color: #555;
-	}
-
-	.metadata-item:last-child {
-		margin-bottom: 0;
-	}
-
-	.metadata-item strong {
-		display: inline-block;
-		min-width: 100px;
-		color: #333;
-	}
-
-	.url-container {
+	.error-section {
 		display: flex;
-		gap: 0.5rem;
-		margin-top: 0.5rem;
+		flex-direction: column;
 		align-items: center;
+		justify-content: center;
+		padding: 4rem 2rem;
+		text-align: center;
+		color: #666;
 	}
 
-	.url-input {
-		flex: 1;
-		padding: 0.5rem;
-		border: 1px solid #ddd;
-		border-radius: 6px;
-		background: #f8f9fa;
-		font-size: 0.875rem;
-		font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-		color: #555;
+	.error-icon {
+		font-size: 3rem;
+		margin-bottom: 1rem;
 	}
 
-	.copy-btn {
-		padding: 0.5rem;
-		border: 1px solid #ddd;
+	.error-section h3 {
+		margin: 0 0 1rem 0;
+		color: #d32f2f;
+		font-size: 1.5rem;
+	}
+
+	.error-section p {
+		margin: 0 0 2rem 0;
+		line-height: 1.6;
+		max-width: 500px;
+	}
+
+	.retry-btn {
+		padding: 0.75rem 1.5rem;
+		background: #2196f3;
+		color: white;
+		border: none;
 		border-radius: 6px;
-		background: white;
+		font-weight: 500;
 		cursor: pointer;
 		transition: all 0.2s ease;
-		font-size: 1rem;
 	}
 
-	.copy-btn:hover {
-		background: #f0f0f0;
-		border-color: #bbb;
-	}
-
-	.next-steps {
-		padding: 2rem;
-		background: #f8f9ff;
-	}
-
-	.next-steps h4 {
-		margin: 0 0 1rem 0;
-		color: #333;
-		font-size: 1.25rem;
-	}
-
-	.next-steps p {
-		margin: 0 0 1rem 0;
-		color: #666;
-		line-height: 1.6;
-	}
-
-	.next-steps ul {
-		margin: 0;
-		padding-left: 1.5rem;
-		color: #666;
-	}
-
-	.next-steps li {
-		margin-bottom: 0.5rem;
-		line-height: 1.5;
+	.retry-btn:hover {
+		background: #1976d2;
+		transform: translateY(-1px);
+		box-shadow: 0 2px 8px rgba(33, 150, 243, 0.3);
 	}
 
 	/* 모바일 반응형 */
@@ -406,73 +276,31 @@
 			gap: 0.5rem;
 		}
 
-		.btn-secondary {
-			padding: 0.375rem 0.75rem;
-			font-size: 0.8125rem;
+		.header-actions button {
+			padding: 0.6rem 1rem;
+			font-size: 0.9rem;
 		}
 
 		.content {
 			padding: 1rem;
 		}
 
-		.welcome-section h2 {
-			font-size: 1.5rem;
+		.loading-section, .error-section {
+			padding: 2rem 1rem;
 		}
 
-		.welcome-section p {
-			font-size: 1rem;
+		.loading-spinner {
+			width: 40px;
+			height: 40px;
 		}
 
-		.file-info {
-			padding: 1rem;
-		}
-
-		.selected-file-section {
-			margin: 1rem;
-		}
-
-		.file-header {
-			padding: 1.5rem;
-			flex-direction: column;
-			text-align: center;
-			gap: 1.5rem;
-		}
-
-		.file-icon {
-			width: 60px;
-			height: 60px;
-			font-size: 2rem;
-		}
-
-		.file-name {
+		.error-section h3 {
 			font-size: 1.25rem;
 		}
 
-		.file-metadata {
-			padding: 1rem 1.5rem;
-		}
-
-		.url-container {
-			flex-direction: column;
-			gap: 0.75rem;
-			align-items: stretch;
-		}
-
-		.next-steps {
-			padding: 1.5rem;
-		}
-	}
-
-	@media (max-width: 480px) {
-		.header {
-			flex-direction: column;
-			gap: 0.75rem;
-			padding: 1rem;
-		}
-
-		.header-actions {
-			width: 100%;
-			justify-content: center;
+		.retry-btn {
+			padding: 0.6rem 1.2rem;
+			font-size: 0.9rem;
 		}
 	}
 </style>
