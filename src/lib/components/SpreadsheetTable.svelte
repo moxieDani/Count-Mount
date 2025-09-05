@@ -529,6 +529,7 @@
 								{#each tableData.headers as header, colIndex}
 									<th 
 										class="col-header"
+										class:date-column={header === '날짜'}
 										style={tableData.headerFormats && tableData.headerFormats[colIndex] ? getCellStyle(tableData.headerFormats[colIndex]) : ''}
 									>
 										{header}
@@ -547,6 +548,7 @@
 												class="data-cell" 
 												class:empty-cell={isCellEmpty(row[colIndex])}
 												class:ac-column={isACColumn(colIndex)}
+												class:date-column={tableData.headers[colIndex] === '날짜'}
 												style={cellStyle}
 											>
 												{formatCellValue(row[colIndex])}
@@ -845,6 +847,12 @@
 		word-break: break-word;
 	}
 
+	.date-column {
+		width: 20px;
+		min-width: 20px;
+		white-space: nowrap;
+	}
+
 	.data-cell.empty-cell {
 		background: #fafafa;
 		color: #ccc;
@@ -1125,6 +1133,11 @@
 			min-width: 60px;
 		}
 
+		.date-column {
+			width: 20px;
+			min-width: 20px !important;
+		}
+
 		.range-info {
 			justify-content: center;
 		}
@@ -1140,6 +1153,11 @@
 		.data-cell {
 			min-width: 50px;
 			max-width: 100px;
+		}
+
+		.date-column {
+			width: 20px;
+			min-width: 20px !important;
 		}
 
 		.date-picker-modal {
