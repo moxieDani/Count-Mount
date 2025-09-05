@@ -141,6 +141,8 @@
 	.app-main {
 		min-height: 100vh;
 		background: #f5f5f5;
+		display: flex;
+		flex-direction: column;
 	}
 
 	.header {
@@ -188,9 +190,10 @@
 	}
 
 	.content {
-		padding: 2rem;
-		max-width: 1200px;
-		margin: 0 auto;
+		flex-grow: 1;
+		display: flex;
+		flex-direction: column;
+		padding: 0;
 	}
 
 	.loading-section {
@@ -282,7 +285,7 @@
 		}
 
 		.content {
-			padding: 1rem;
+			padding: 0;
 		}
 
 		.loading-section, .error-section {

@@ -508,7 +508,7 @@
 						disabled={isLoading || !canGoPrevious}
 						title="이전 달"
 					>
-						◀ 
+						◀ 이전 달
 					</button>
 					<button class="current-month-indicator" onclick={openDatePicker} title="년도/월 선택">
 						{currentYear}년 {monthNames[currentMonth - 1]}
@@ -519,7 +519,7 @@
 						disabled={isLoading || !canGoNext}
 						title="다음 달"
 					>
-						▶
+						다음 달 ▶
 					</button>
 				</div>
 				<div class="table-wrapper">
@@ -601,11 +601,12 @@
 
 <style>
 	.table-container {
-		margin-top: 1.5rem;
 		background: white;
-		border-radius: 12px;
-		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 		overflow: hidden;
+		width: 100%;
+		flex-grow: 1; /* Changed from height: 100% */
+		display: flex;
+		flex-direction: column;
 	}
 
 	.table-header {
@@ -647,7 +648,8 @@
 
 	.month-navigation {
 		display: flex;
-		align-items: center;
+		justify-content: center;
+		flex-wrap: wrap;
 		gap: 1rem;
 	}
 
@@ -741,7 +743,11 @@
 	}
 
 	.table-content {
-		padding: 1.5rem;
+		padding: 1.5rem 0rem;
+		flex-grow: 1;
+		display: flex;
+		flex-direction: column;
+		overflow: hidden;
 	}
 
 	.loading-state {
@@ -803,10 +809,11 @@
 	}
 
 	.table-wrapper {
-		overflow-x: auto;
+		overflow: auto;
 		border: 1px solid #e0e0e0;
 		border-radius: 8px;
 		margin: 1rem 0;
+		flex-grow: 1;
 	}
 
 	.data-table {
@@ -1100,7 +1107,7 @@
 		}
 
 		.table-content {
-			padding: 1rem;
+			padding: 1rem 0rem;
 		}
 
 		.summary-stats {
