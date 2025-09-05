@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
+	import MonthYearPicker from './MonthYearPicker.svelte';
 
 	// Google Picker API 타입 정의
 	const googlePicker: any = typeof window !== 'undefined' ? (window as any).google : null;
@@ -43,20 +44,6 @@
 	
 	// 년도/월 선택 모달 상태
 	let showDatePicker = $state(false);
-	let selectedYear = $state(new Date().getFullYear());
-	let selectedMonth = $state(new Date().getMonth() + 1);
-	
-	// month picker 값 (YYYY-MM 형식)
-	let monthPickerValue = $state(`${new Date().getFullYear()}-${(new Date().getMonth() + 1).toString().padStart(2, '0')}`);
-	
-	// monthPickerValue가 변경될 때마다 selectedYear와 selectedMonth 업데이트
-	$effect(() => {
-		if (monthPickerValue) {
-			const [year, month] = monthPickerValue.split('-');
-			selectedYear = parseInt(year);
-			selectedMonth = parseInt(month);
-		}
-	});
 
 	// 총 지출 금액을 계산하는 함수
 	function calculateTotalExpense(): number {
@@ -378,9 +365,6 @@
 
 	// 년도/월 선택 모달 열기
 	function openDatePicker() {
-		selectedYear = currentYear;
-		selectedMonth = currentMonth;
-		monthPickerValue = `${currentYear}-${currentMonth.toString().padStart(2, '0')}`;
 		showDatePicker = true;
 	}
 
@@ -389,13 +373,8 @@
 		showDatePicker = false;
 	}
 
-	// 년도 변경 함수
-	function changeYear(delta: number) {
-		selectedYear += delta;
-	}
-
-	// 월 선택 함수 - 바로 해당 월로 이동
-	async function selectMonth(month: number) {
+	// 년도/월 선택 처리 함수
+	async function handleMonthYearSelect(selectedYear: number, selectedMonth: number) {
 		showDatePicker = false;
 		
 		// 선택된 년도가 현재 년도와 다르면 스프레드시트를 변경해야 함
@@ -404,7 +383,7 @@
 			if (foundSpreadsheetId) {
 				spreadsheetId = foundSpreadsheetId;
 				currentYear = selectedYear;
-				currentMonth = month;
+				currentMonth = selectedMonth;
 			} else {
 				// 자동 검색 실패 시 수동 선택 요청
 				showSpreadsheetPicker(selectedYear);
@@ -412,7 +391,7 @@
 			}
 		} else {
 			// 같은 년도면 월만 변경
-			currentMonth = month;
+			currentMonth = selectedMonth;
 		}
 		
 		// 데이터 갱신
@@ -511,7 +490,7 @@
 				disabled={isLoading || !canGoPrevious}
 				title="이전 달"
 			>
-				◀ 이전달
+				◀ 
 			</button>
 			<button class="current-month-indicator" onclick={openDatePicker} title="년도/월 선택">
 				{currentYear}년 {monthNames[currentMonth - 1]}
@@ -522,7 +501,7 @@
 				disabled={isLoading || !canGoNext}
 				title="다음 달"
 			>
-				다음달 ▶
+				 ▶
 			</button>
 		</div>
 	</div>
@@ -613,36 +592,12 @@
 
 <!-- 년도/월 선택 모달 -->
 {#if showDatePicker}
-	<div class="month-picker-overlay" onclick={closeDatePicker}>
-		<div class="month-picker-modal" onclick={(e) => e.stopPropagation()}>
-			<div class="month-picker-header">
-				<h3>년도/월 선택</h3>
-				<button class="month-picker-close" onclick={closeDatePicker}>×</button>
-			</div>
-			
-			<div class="month-picker-content">
-				<!-- 년도 선택 -->
-				<div class="year-selector">
-					<button class="year-nav-btn" onclick={() => changeYear(-1)}>◀</button>
-					<span class="current-year">{selectedYear}년</span>
-					<button class="year-nav-btn" onclick={() => changeYear(1)}>▶</button>
-				</div>
-				
-				<!-- 월 그리드 -->
-				<div class="months-container">
-					{#each monthNames as monthName, index}
-						<button 
-							class="month-btn" 
-							class:active={currentYear === selectedYear && currentMonth === index + 1}
-							onclick={() => selectMonth(index + 1)}
-						>
-							{monthName}
-						</button>
-					{/each}
-				</div>
-			</div>
-		</div>
-	</div>
+	<MonthYearPicker 
+		currentYear={currentYear}
+		currentMonth={currentMonth}
+		onSelect={handleMonthYearSelect}
+		onClose={closeDatePicker}
+	/>
 {/if}
 
 <style>
