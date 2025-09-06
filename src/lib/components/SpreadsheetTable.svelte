@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import MonthYearPicker from './MonthYearPicker.svelte';
+	import EditRowModal from './EditRowModal.svelte';
 
 	// Google Picker API 타입 정의
 	const googlePicker: any = typeof window !== 'undefined' ? (window as any).google : null;
@@ -70,6 +71,115 @@
 	
 	// 년도/월 선택 모달 상태
 	let showDatePicker = $state(false);
+	
+	// 행 편집 모달 상태
+	let showEditModal = $state(false);
+	let selectedRowIndex = $state<number | null>(null);
+	let selectedRowData = $state<string[]>([]);
+	let isModalLoading = $state(false);
+
+	// 셀 클릭 시 편집 모달 열기
+	function openEditModal(rowIndex: number) {
+		if (!tableData?.values) return;
+		
+		selectedRowIndex = rowIndex;
+		selectedRowData = [...tableData.values[rowIndex]]; // 현재 행 데이터 복사
+		showEditModal = true;
+	}
+
+	// 편집 모달 닫기
+	function closeEditModal() {
+		showEditModal = false;
+		selectedRowIndex = null;
+		selectedRowData = [];
+	}
+
+	// 모달에서 저장 이벤트 처리
+	async function handleModalSave(event: CustomEvent) {
+		const { data, rowIndex } = event.detail;
+		if (rowIndex === null || !tableData?.metadata?.sheetName) return;
+
+		isModalLoading = true;
+		try {
+			// 수정된 데이터를 API로 업데이트
+			const actualRowIndex = rowIndex + 27; // Y27부터 시작하므로 +27
+			const updateRange = `${tableData.metadata.sheetName}!Y${actualRowIndex}:AD${actualRowIndex}`;
+			
+			const response = await fetch(`/api/sheets/${spreadsheetId}/update`, {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+					'Authorization': `Bearer ${session?.accessToken}`
+				},
+				body: JSON.stringify({
+					range: updateRange,
+					values: [data]
+				})
+			});
+
+			if (response.ok) {
+				// 성공적으로 업데이트되면 로컬 상태도 업데이트
+				if (tableData?.values && rowIndex < tableData.values.length) {
+					tableData.values[rowIndex] = [...data];
+				}
+				closeEditModal();
+				alert('데이터가 성공적으로 저장되었습니다.');
+			} else {
+				const errorData = await response.json();
+				console.error('Update failed:', errorData);
+				alert('데이터 저장에 실패했습니다.');
+			}
+		} catch (error) {
+			console.error('Error saving row data:', error);
+			alert('데이터 저장 중 오류가 발생했습니다.');
+		} finally {
+			isModalLoading = false;
+		}
+	}
+
+	// 모달에서 삭제 이벤트 처리
+	async function handleModalDelete(event: CustomEvent) {
+		const { rowIndex } = event.detail;
+		if (rowIndex === null || !tableData?.metadata?.sheetName) return;
+
+		isModalLoading = true;
+		try {
+			// 빈 데이터로 행 전체를 업데이트
+			const actualRowIndex = rowIndex + 27; // Y27부터 시작하므로 +27
+			const updateRange = `${tableData.metadata.sheetName}!Y${actualRowIndex}:AD${actualRowIndex}`;
+			const emptyRowData = new Array(selectedRowData.length).fill('');
+			
+			const response = await fetch(`/api/sheets/${spreadsheetId}/update`, {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+					'Authorization': `Bearer ${session?.accessToken}`
+				},
+				body: JSON.stringify({
+					range: updateRange,
+					values: [emptyRowData]
+				})
+			});
+
+			if (response.ok) {
+				// 성공적으로 삭제되면 로컬 상태도 업데이트
+				if (tableData?.values && rowIndex < tableData.values.length) {
+					tableData.values[rowIndex] = emptyRowData;
+				}
+				closeEditModal();
+				alert('데이터가 성공적으로 삭제되었습니다.');
+			} else {
+				const errorData = await response.json();
+				console.error('Delete failed:', errorData);
+				alert('데이터 삭제에 실패했습니다.');
+			}
+		} catch (error) {
+			console.error('Error deleting row data:', error);
+			alert('데이터 삭제 중 오류가 발생했습니다.');
+		} finally {
+			isModalLoading = false;
+		}
+	}
 
 	// 총 지출 금액을 계산하는 함수
 	function calculateTotalExpense(): number {
@@ -616,11 +726,13 @@
 											{@const cellFormat = tableData.cellFormats && tableData.cellFormats[rowIndex] && tableData.cellFormats[rowIndex][colIndex]}
 											{@const cellStyle = getCellStyle(cellFormat)}
 											<td 
-												class="data-cell" 
+												class="data-cell clickable-cell" 
 												class:empty-cell={isCellEmpty(row[colIndex])}
 												class:ac-column={isACColumn(colIndex)}
 												class:date-column={tableData.headers[colIndex] === '날짜'}
 												style={cellStyle}
+												onclick={() => openEditModal(rowIndex)}
+												title="클릭하여 편집"
 											>
 												{formatCellValue(row[colIndex])}
 											</td>
@@ -675,6 +787,18 @@
 		onClose={closeDatePicker}
 	/>
 {/if}
+
+<!-- 행 편집 모달 -->
+<EditRowModal
+	isOpen={showEditModal}
+	headers={tableData?.headers || []}
+	rowData={selectedRowData}
+	rowIndex={selectedRowIndex}
+	isLoading={isModalLoading}
+	on:close={closeEditModal}
+	on:save={handleModalSave}
+	on:delete={handleModalDelete}
+/>
 
 <style>
 	.table-container {
@@ -750,6 +874,188 @@
 		background: rgba(33, 150, 243, 0.1);
 		border: 1px solid rgba(33, 150, 243, 0.3);
 		color: #1976d2;
+	}
+
+	/* 셀 클릭 가능 스타일 */
+	.clickable-cell {
+		cursor: pointer;
+		transition: all 0.15s ease;
+	}
+
+	/* 편집 모달 스타일 */
+	.edit-modal-overlay {
+		position: fixed;
+		top: 0;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		background: rgba(0, 0, 0, 0.5);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		z-index: 1000;
+		padding: 1rem;
+	}
+
+	.edit-modal {
+		background: white;
+		border-radius: 12px;
+		box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+		width: 100%;
+		max-width: 500px;
+		max-height: 90vh;
+		overflow: hidden;
+		display: flex;
+		flex-direction: column;
+		animation: modalSlideIn 0.3s ease-out;
+	}
+
+	@keyframes modalSlideIn {
+		from {
+			opacity: 0;
+			transform: scale(0.9) translateY(-20px);
+		}
+		to {
+			opacity: 1;
+			transform: scale(1) translateY(0);
+		}
+	}
+
+	.edit-modal-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		padding: 1.5rem;
+		border-bottom: 1px solid #e0e0e0;
+		background: #f8f9fa;
+	}
+
+	.edit-modal-header h3 {
+		margin: 0;
+		color: #333;
+		font-size: 1.2rem;
+		font-weight: 600;
+	}
+
+	.modal-close-btn {
+		background: none;
+		border: none;
+		font-size: 1.5rem;
+		color: #666;
+		cursor: pointer;
+		padding: 0.25rem;
+		border-radius: 4px;
+		width: 32px;
+		height: 32px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		transition: all 0.2s ease;
+	}
+
+	.modal-close-btn:hover {
+		background: rgba(0, 0, 0, 0.1);
+		color: #333;
+	}
+
+	.edit-modal-content {
+		padding: 1.5rem;
+		flex: 1;
+		overflow-y: auto;
+	}
+
+	.edit-form {
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
+	}
+
+	.form-field {
+		display: flex;
+		flex-direction: column;
+	}
+
+	.field-label {
+		display: block;
+		margin-bottom: 0.5rem;
+		color: #333;
+		font-weight: 500;
+		font-size: 0.9rem;
+	}
+
+	.field-input {
+		width: 100%;
+		padding: 0.75rem;
+		border: 2px solid #ddd;
+		border-radius: 6px;
+		font-size: 1rem;
+		transition: border-color 0.2s ease;
+		background: white;
+		outline: none;
+	}
+
+	.field-input:focus {
+		border-color: #2196f3;
+		box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.1);
+	}
+
+	.field-input.date-field {
+		max-width: 150px;
+	}
+
+	.edit-modal-footer {
+		display: flex;
+		gap: 0.75rem;
+		justify-content: flex-end;
+		padding: 1.5rem;
+		border-top: 1px solid #e0e0e0;
+		background: #f8f9fa;
+	}
+
+	.btn-cancel,
+	.btn-delete,
+	.btn-save {
+		padding: 0.75rem 1.5rem;
+		border: none;
+		border-radius: 6px;
+		font-weight: 500;
+		font-size: 0.9rem;
+		cursor: pointer;
+		transition: all 0.2s ease;
+		min-width: 80px;
+	}
+
+	.btn-cancel {
+		background: #f5f5f5;
+		color: #666;
+		border: 1px solid #ddd;
+	}
+
+	.btn-cancel:hover {
+		background: #e9ecef;
+		color: #333;
+	}
+
+	.btn-delete {
+		background: #dc3545;
+		color: white;
+	}
+
+	.btn-delete:hover {
+		background: #c82333;
+		transform: translateY(-1px);
+		box-shadow: 0 2px 8px rgba(220, 53, 69, 0.3);
+	}
+
+	.btn-save {
+		background: #28a745;
+		color: white;
+	}
+
+	.btn-save:hover {
+		background: #218838;
+		transform: translateY(-1px);
+		box-shadow: 0 2px 8px rgba(40, 167, 69, 0.3);
 	}
 
 	.month-navigation {
@@ -886,39 +1192,6 @@
 		100% { transform: rotate(360deg); }
 	}
 
-	.data-summary {
-		margin-bottom: 1rem;
-		padding: 1rem;
-		background: #f8f9fa;
-		border-radius: 8px;
-	}
-
-	.summary-stats {
-		display: flex;
-		gap: 2rem;
-		flex-wrap: wrap;
-	}
-
-	.stat-item {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-	}
-
-	.stat-label {
-		color: #666;
-		font-size: 0.875rem;
-		font-weight: 500;
-	}
-
-	.stat-value {
-		color: #333;
-		font-weight: 600;
-		background: white;
-		padding: 0.25rem 0.5rem;
-		border-radius: 4px;
-		border: 1px solid #e0e0e0;
-	}
 
 	.table-wrapper {
 		overflow: auto;
@@ -940,6 +1213,28 @@
 		text-align: center;
 		border: 1px solid #e0e0e0;
 	}
+
+	/* 테이블 행 hover 효과 */
+	.data-row {
+		transition: all 0.2s ease;
+		position: relative;
+		border-left: 2px solid transparent;
+	}
+
+	.data-row:hover {
+		background-color: rgba(33, 150, 243, 0.06);
+		box-shadow: 0 2px 8px rgba(33, 150, 243, 0.1);
+		transform: translateY(-1px);
+		z-index: 1;
+		border-left: 4px solid #2196f3;
+	}
+
+	.data-row:hover .data-cell {
+		background-color: rgba(33, 150, 243, 0.06) !important;
+		border-color: rgba(33, 150, 243, 0.15);
+		color: #1565c0;
+	}
+
 
 	.col-header {
 		background: #f5f5f5;
@@ -972,9 +1267,6 @@
 		background: #fafafa;
 	}
 
-	.data-row:hover .data-cell {
-		background: #e3f2fd;
-	}
 
 	/* 빈 행 스타일 */
 	.empty-row .data-cell {
@@ -1253,6 +1545,35 @@
 			padding: 0.2rem 0.6rem;
 		}
 
+		.actions-cell {
+			width: 60px;
+			min-width: 60px;
+			padding: 0.25rem;
+		}
+
+		.actions-header {
+			width: 60px;
+			min-width: 60px;
+		}
+
+		.cell-input {
+			font-size: 0.75rem;
+			padding: 0.2rem 0.4rem;
+		}
+
+		.edit-actions {
+			gap: 0.1rem;
+		}
+
+		.edit-btn,
+		.save-btn,
+		.cancel-btn {
+			min-width: 24px;
+			height: 24px;
+			font-size: 0.75rem;
+			padding: 0.1rem;
+		}
+
 		.summary-stats {
 			flex-direction: column;
 			gap: 0.5rem;
@@ -1268,7 +1589,8 @@
 			min-width: 60px;
 		}
 
-		.date-column {
+		th.date-column,
+		td.date-column {
 			width: 20px;
 			min-width: 20px !important;
 		}
@@ -1290,7 +1612,8 @@
 			max-width: 100px;
 		}
 
-		.date-column {
+		th.date-column,
+		td.date-column {
 			width: 20px;
 			min-width: 20px !important;
 		}
