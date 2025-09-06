@@ -37,6 +37,32 @@
 		};
 	} | null>(null);
 	
+	let settlementData = $state<{
+		range: string;
+		settlement: {
+			seoEun: {
+				label: string;
+				amount: number;
+				formattedAmount: string;
+			};
+			kiSoon: {
+				label: string;
+				amount: number;
+				formattedAmount: string;
+			};
+			total: {
+				amount: number;
+				formattedAmount: string;
+			};
+		};
+		metadata: {
+			spreadsheetId: string;
+			sheetName: string;
+			actualRange: string;
+			hasData: boolean;
+		};
+	} | null>(null);
+	
 	let isLoading = $state(false);
 	let error = $state('');
 	let currentMonth = $state(new Date().getMonth() + 1);
@@ -217,6 +243,34 @@
 		}
 	}
 
+	// 정산 금액 데이터를 가져오는 함수
+	async function fetchSettlementData(sheetName: string) {
+		if (!session?.accessToken) return;
+
+		try {
+			const queryParams = new URLSearchParams({
+				sheetName
+			});
+
+			const response = await fetch(`/api/sheets/${spreadsheetId}/settlement?${queryParams}`, {
+				headers: {
+					'Authorization': `Bearer ${session.accessToken}`
+				}
+			});
+
+			if (response.ok) {
+				const data = await response.json();
+				settlementData = data;
+			} else {
+				console.warn('Failed to fetch settlement data:', response.status);
+				settlementData = null;
+			}
+		} catch (err) {
+			console.error('Error fetching settlement data:', err);
+			settlementData = null;
+		}
+	}
+
 	async function fetchTableData() {
 		if (!session?.accessToken) return;
 
@@ -271,6 +325,9 @@
 
 			const data = await response.json();
 			tableData = data;
+
+			// 4. 정산 금액 데이터도 함께 가져오기
+			await fetchSettlementData(sheetName);
 
 		} catch (err) {
 			error = err instanceof Error ? err.message : '데이터를 불러오는데 실패했습니다.';
@@ -483,7 +540,19 @@
 			<div class="expense-info">
 				<span class="expense-badge">총 지출: {formatNumber(calculateTotalExpense())}원</span>
 			</div>
-		</div>
+			{#if settlementData?.settlement}
+			<div class="expense-info">
+				<span class="settlement-badge seo-eun">
+					{settlementData.settlement.seoEun.label}: {settlementData.settlement.seoEun.formattedAmount}원
+				</span>
+			</div>
+			<div class="expense-info">
+				<span class="settlement-badge ki-soon">
+					{settlementData.settlement.kiSoon.label}: {settlementData.settlement.kiSoon.formattedAmount}원
+				</span>
+			</div>
+		{/if}
+	</div>
 	</div>
 
 
@@ -655,6 +724,32 @@
 		font-weight: 600;
 		text-align: center;
 		line-height: 1.2;
+		margin-bottom: 0.5rem;
+	}
+	
+	.settlement-badge {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		padding: 0.25rem 0.8rem;
+		border-radius: 4px;
+		font-size: 0.8rem;
+		font-weight: 600;
+		text-align: center;
+		line-height: 1.2;
+	}
+	
+	.settlement-badge.seo-eun {
+		background: rgba(255, 152, 0, 0.1);
+		border: 1px solid rgba(255, 152, 0, 0.3);
+		color: #e65100;
+		margin-bottom: 0.5rem;
+	}
+	
+	.settlement-badge.ki-soon {
+		background: rgba(33, 150, 243, 0.1);
+		border: 1px solid rgba(33, 150, 243, 0.3);
+		color: #1976d2;
 	}
 
 	.month-navigation {
@@ -1146,6 +1241,16 @@
 
 		.table-content {
 			padding: 1rem 0rem;
+		}
+
+		.expense-info {
+			gap: 0.25rem;
+		}
+
+		.expense-badge,
+		.settlement-badge {
+			font-size: 0.75rem;
+			padding: 0.2rem 0.6rem;
 		}
 
 		.summary-stats {
