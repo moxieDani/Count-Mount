@@ -30,6 +30,8 @@
 	let showDatePicker = $state<number | null>(null); // 어떤 필드의 날짜 선택기를 보여줄지
 	let paymentMethodOptions = $state<string[]>([]); // 결제방식 옵션들
 	let isLoadingPaymentMethods = $state(false); // 결제방식 로딩 상태
+	let accountOptions = $state<string[]>([]); // 계정 옵션들
+	let isLoadingAccounts = $state(false); // 계정 로딩 상태
 	
 	// DatePicker에서 사용할 날짜 정보
 	let selectedYear = $state(currentYear || new Date().getFullYear());
@@ -70,6 +72,9 @@
 					newData[index] = parseAmount(newData[index] || '');
 				} else if (isPaymentMethodField(header)) {
 					// 결제방식 필드는 기존 값을 그대로 유지 (드롭다운에서 선택되도록)
+					newData[index] = (newData[index] || '').toString().trim();
+				} else if (isAccountField(header)) {
+					// 계정 필드는 기존 값을 그대로 유지 (드롭다운에서 선택되도록)
 					newData[index] = (newData[index] || '').toString().trim();
 				}
 			});
@@ -126,6 +131,11 @@
 	// 결제방식 필드인지 확인하는 함수
 	function isPaymentMethodField(header: string): boolean {
 		return header === '결제방식';
+	}
+
+	// 계정 필드인지 확인하는 함수
+	function isAccountField(header: string): boolean {
+		return header === '계정';
 	}
 
 	// 금액 파싱 함수
@@ -222,7 +232,7 @@
 				}
 				
 				paymentMethodOptions = fetchedAccounts;
-				console.log('Payment method options loaded:', paymentMethodOptions);
+				console.log('Payment method options loaded:', $state.snapshot(paymentMethodOptions));
 			} else {
 				console.error('Failed to fetch account options:', response.statusText);
 			}
@@ -233,12 +243,65 @@
 		}
 	}
 
+	// 계정 옵션 가져오기
+	async function fetchAccountOptions() {
+		if (!spreadsheetId || !accessToken || isLoadingAccounts || accountOptions.length > 0) {
+			return; // 이미 로드됐거나 로딩 중이거나 필요한 정보가 없으면 스킵
+		}
+		
+		isLoadingAccounts = true;
+		
+		try {
+			const response = await fetch(`/api/sheets/${spreadsheetId}/accounts`, {
+				headers: {
+					'Authorization': `Bearer ${accessToken}`,
+					'Content-Type': 'application/json'
+				}
+			});
+			
+			if (response.ok) {
+				const data = await response.json();
+				let fetchedAccounts = data.accounts || [];
+				
+				// 현재 행의 계정 값이 옵션에 없으면 추가
+				const accountFieldIndex = headers.findIndex(header => isAccountField(header));
+				if (accountFieldIndex !== -1 && editedData[accountFieldIndex]) {
+					const currentAccountValue = editedData[accountFieldIndex].toString().trim();
+					if (currentAccountValue && !fetchedAccounts.includes(currentAccountValue)) {
+						fetchedAccounts = [currentAccountValue, ...fetchedAccounts];
+					}
+				}
+				
+				accountOptions = fetchedAccounts;
+				console.log('Account options loaded:', $state.snapshot(accountOptions));
+			} else {
+				console.error('Failed to fetch account options:', response.statusText);
+			}
+		} catch (error) {
+			console.error('Error fetching account options:', error);
+		} finally {
+			isLoadingAccounts = false;
+		}
+	}
+
 	// 모달이 열릴 때 결제방식 옵션 로드
 	$effect(() => {
 		if (isOpen && headers.some((header: string) => isPaymentMethodField(header))) {
 			// 데이터 초기화가 완료된 후 결제방식 옵션 로드
 			if (editedData && editedData.length > 0) {
 				fetchPaymentMethodOptions();
+			}
+		}
+	});
+
+	// 모달이 열릴 때 계정 옵션 로드
+	$effect(() => {
+		if (isOpen && headers.some((header: string) => isAccountField(header))) {
+			// 데이터 초기화가 완료된 후 계정 옵션 로드
+			if (editedData && editedData.length > 0) {
+				setTimeout(() => {
+					fetchAccountOptions();
+				}, 300); // 300ms 지연 (결제방식 로딩 후)
 			}
 		}
 	});
@@ -321,6 +384,26 @@
 											{/each}
 										</select>
 										{#if isLoadingPaymentMethods}
+											<div class="loading-indicator">
+												<div class="spinner"></div>
+											</div>
+										{/if}
+									</div>
+								{:else if isAccountField(header)}
+									<!-- 계정 드롭다운 -->
+									<div class="select-container">
+										<select
+											id="field-{index}"
+											bind:value={editedData[index]}
+											class="field-input select-input"
+											disabled={isLoading || isLoadingAccounts}
+										>
+											<option value="">계정을 선택하세요</option>
+											{#each accountOptions as account}
+												<option value={account}>{account}</option>
+											{/each}
+										</select>
+										{#if isLoadingAccounts}
 											<div class="loading-indicator">
 												<div class="spinner"></div>
 											</div>
