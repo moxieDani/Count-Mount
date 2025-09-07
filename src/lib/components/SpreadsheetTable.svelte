@@ -114,16 +114,16 @@
 				body: JSON.stringify({
 					range: updateRange,
 					values: [data],
-					valueInputOption: 'USER_ENTERED'
+					valueInputOption: 'USER_ENTERED',
+					sheetName: tableData.metadata.sheetName,
+					dataRange: range // `range` prop is the full data range
 				})
 			});
 
 			if (response.ok) {
-				// 성공적으로 업데이트되면 로컬 상태도 업데이트
-				if (tableData?.values && rowIndex < tableData.values.length) {
-					tableData.values[rowIndex] = [...data];
-				}
+				// 성공적으로 업데이트되면 데이터를 새로고침하여 정렬된 상태를 반영
 				closeEditModal();
+				await fetchTableData();
 				alert('데이터가 성공적으로 저장되었습니다.');
 			} else {
 				const errorData = await response.json();
@@ -159,16 +159,16 @@
 				body: JSON.stringify({
 					range: updateRange,
 					values: [emptyRowData],
-					valueInputOption: 'USER_ENTERED'
+					valueInputOption: 'USER_ENTERED',
+					sheetName: tableData.metadata.sheetName,
+					dataRange: range
 				})
 			});
 
 			if (response.ok) {
-				// 성공적으로 삭제되면 로컬 상태도 업데이트
-				if (tableData?.values && rowIndex < tableData.values.length) {
-					tableData.values[rowIndex] = emptyRowData;
-				}
+				// 성공적으로 삭제되면 데이터를 새로고침
 				closeEditModal();
+				await fetchTableData();
 				alert('데이터가 성공적으로 삭제되었습니다.');
 			} else {
 				const errorData = await response.json();
