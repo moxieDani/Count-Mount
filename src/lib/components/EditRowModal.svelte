@@ -11,7 +11,9 @@
 		rowIndex = null,
 		isLoading = false,
 		currentYear = new Date().getFullYear(),
-		currentMonth = new Date().getMonth() + 1
+		currentMonth = new Date().getMonth() + 1,
+		spreadsheetId = null,
+		accessToken = null
 	} = $props<{
 		isOpen: boolean;
 		headers: string[];
@@ -20,10 +22,14 @@
 		isLoading?: boolean;
 		currentYear?: number;
 		currentMonth?: number;
+		spreadsheetId?: string | null;
+		accessToken?: string | null;
 	}>();
 
 	let editedData = $state<string[]>([]);
 	let showDatePicker = $state<number | null>(null); // 어떤 필드의 날짜 선택기를 보여줄지
+	let paymentMethodOptions = $state<string[]>([]); // 결제방식 옵션들
+	let isLoadingPaymentMethods = $state(false); // 결제방식 로딩 상태
 	
 	// DatePicker에서 사용할 날짜 정보
 	let selectedYear = $state(currentYear || new Date().getFullYear());
@@ -56,12 +62,15 @@
 	function initializeData() {
 		if (isOpen && rowData) {
 			const newData = [...rowData];
-			// 날짜 및 금액 필드의 형식을 정규화
+			// 날짜, 금액, 계정 필드의 형식을 정규화
 			headers.forEach((header, index) => {
 				if (isDateField(header)) {
 					newData[index] = normalizeDateFormat(newData[index] || '');
 				} else if (isAmountField(header)) {
 					newData[index] = parseAmount(newData[index] || '');
+				} else if (isPaymentMethodField(header)) {
+					// 결제방식 필드는 기존 값을 그대로 유지 (드롭다운에서 선택되도록)
+					newData[index] = (newData[index] || '').toString().trim();
 				}
 			});
 			editedData = newData;
@@ -112,6 +121,11 @@
 	// 금액 필드인지 확인하는 함수
 	function isAmountField(header: string): boolean {
 		return header === '금액';
+	}
+
+	// 결제방식 필드인지 확인하는 함수
+	function isPaymentMethodField(header: string): boolean {
+		return header === '결제방식';
 	}
 
 	// 금액 파싱 함수
@@ -177,6 +191,57 @@
 			closeDatePicker();
 		}
 	}
+
+	// 결제방식 옵션 가져오기
+	async function fetchPaymentMethodOptions() {
+		if (!spreadsheetId || !accessToken || isLoadingPaymentMethods || paymentMethodOptions.length > 0) {
+			return; // 이미 로드됐거나 로딩 중이거나 필요한 정보가 없으면 스킵
+		}
+		
+		isLoadingPaymentMethods = true;
+		
+		try {
+			const response = await fetch(`/api/sheets/${spreadsheetId}/payment-methods`, {
+				headers: {
+					'Authorization': `Bearer ${accessToken}`,
+					'Content-Type': 'application/json'
+				}
+			});
+			
+			if (response.ok) {
+				const data = await response.json();
+				let fetchedAccounts = data.accounts || [];
+				
+				// 현재 행의 결제방식 값이 옵션에 없으면 추가
+				const paymentMethodFieldIndex = headers.findIndex(header => isPaymentMethodField(header));
+				if (paymentMethodFieldIndex !== -1 && editedData[paymentMethodFieldIndex]) {
+					const currentPaymentMethodValue = editedData[paymentMethodFieldIndex].toString().trim();
+					if (currentPaymentMethodValue && !fetchedAccounts.includes(currentPaymentMethodValue)) {
+						fetchedAccounts = [currentPaymentMethodValue, ...fetchedAccounts];
+					}
+				}
+				
+				paymentMethodOptions = fetchedAccounts;
+				console.log('Payment method options loaded:', paymentMethodOptions);
+			} else {
+				console.error('Failed to fetch account options:', response.statusText);
+			}
+		} catch (error) {
+			console.error('Error fetching account options:', error);
+		} finally {
+			isLoadingPaymentMethods = false;
+		}
+	}
+
+	// 모달이 열릴 때 결제방식 옵션 로드
+	$effect(() => {
+		if (isOpen && headers.some((header: string) => isPaymentMethodField(header))) {
+			// 데이터 초기화가 완료된 후 결제방식 옵션 로드
+			if (editedData && editedData.length > 0) {
+				fetchPaymentMethodOptions();
+			}
+		}
+	});
 </script>
 
 <svelte:window on:keydown={handleKeydown} />
@@ -241,6 +306,26 @@
 										placeholder="숫자만 입력하세요"
 										disabled={isLoading}
 									/>
+								{:else if isPaymentMethodField(header)}
+									<!-- 결제방식 드롭다운 -->
+									<div class="select-container">
+										<select
+											id="field-{index}"
+											bind:value={editedData[index]}
+											class="field-input select-input"
+											disabled={isLoading || isLoadingPaymentMethods}
+										>
+											<option value="">결제방식을 선택하세요</option>
+											{#each paymentMethodOptions as paymentMethod}
+												<option value={paymentMethod}>{paymentMethod}</option>
+											{/each}
+										</select>
+										{#if isLoadingPaymentMethods}
+											<div class="loading-indicator">
+												<div class="spinner"></div>
+											</div>
+										{/if}
+									</div>
 								{:else}
 									<!-- 일반 텍스트 필드 -->
 									<input
@@ -614,6 +699,43 @@
 		cursor: not-allowed;
 	}
 
+	/* 드롭다운 관련 스타일 */
+	.select-container {
+		position: relative;
+	}
+
+	.select-input {
+		appearance: none;
+		background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e");
+		background-position: right 0.5rem center;
+		background-repeat: no-repeat;
+		background-size: 1.5em 1.5em;
+		padding-right: 2.5rem;
+		cursor: pointer;
+	}
+
+	.select-input:disabled {
+		cursor: not-allowed;
+		background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%9ca3af' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e");
+	}
+
+	.loading-indicator {
+		position: absolute;
+		right: 2.5rem;
+		top: 50%;
+		transform: translateY(-50%);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 1rem;
+		height: 1rem;
+	}
+
+	.loading-indicator .spinner {
+		width: 1rem;
+		height: 1rem;
+		border-width: 1px;
+	}
 
 	/* 모바일 반응형 */
 	@media (max-width: 640px) {

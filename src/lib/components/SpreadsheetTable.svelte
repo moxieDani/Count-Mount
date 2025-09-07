@@ -799,6 +799,8 @@
 	isLoading={isModalLoading}
 	currentYear={currentYear}
 	currentMonth={currentMonth}
+	spreadsheetId={spreadsheetId}
+	accessToken={session?.accessToken}
 	on:close={closeEditModal}
 	on:save={handleModalSave}
 	on:delete={handleModalDelete}
