@@ -113,7 +113,8 @@
 				},
 				body: JSON.stringify({
 					range: updateRange,
-					values: [data]
+					values: [data],
+					valueInputOption: 'USER_ENTERED'
 				})
 			});
 
@@ -157,7 +158,8 @@
 				},
 				body: JSON.stringify({
 					range: updateRange,
-					values: [emptyRowData]
+					values: [emptyRowData],
+					valueInputOption: 'USER_ENTERED'
 				})
 			});
 
@@ -795,6 +797,8 @@
 	rowData={selectedRowData}
 	rowIndex={selectedRowIndex}
 	isLoading={isModalLoading}
+	currentYear={currentYear}
+	currentMonth={currentMonth}
 	on:close={closeEditModal}
 	on:save={handleModalSave}
 	on:delete={handleModalDelete}

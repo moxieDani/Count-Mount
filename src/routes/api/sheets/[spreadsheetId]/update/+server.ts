@@ -20,7 +20,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
     
     try {
         const body = await request.json();
-        const { range, values } = body;
+        const { range, values, valueInputOption } = body;
         
         if (!range || !values) {
             return json({ 
@@ -31,11 +31,12 @@ export const POST: RequestHandler = async ({ params, request }) => {
         console.log('Update API Request Details:', {
             spreadsheetId,
             range,
-            values
+            values,
+            valueInputOption
         });
         
         // Google Sheets API로 데이터 업데이트
-        const updateUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(range)}?valueInputOption=RAW`;
+        const updateUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(range)}?valueInputOption=${valueInputOption || 'RAW'}`;
         console.log('Update API URL:', updateUrl);
         
         const updateResponse = await fetch(updateUrl, {

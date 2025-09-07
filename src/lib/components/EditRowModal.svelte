@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { createEventDispatcher } from 'svelte';
+	import DatePicker from './DatePicker.svelte';
 	
 	const dispatch = createEventDispatcher();
 	
@@ -8,21 +9,76 @@
 		headers = [],
 		rowData = [],
 		rowIndex = null,
-		isLoading = false
+		isLoading = false,
+		currentYear = new Date().getFullYear(),
+		currentMonth = new Date().getMonth() + 1
 	} = $props<{
 		isOpen: boolean;
 		headers: string[];
 		rowData: string[];
 		rowIndex: number | null;
 		isLoading?: boolean;
+		currentYear?: number;
+		currentMonth?: number;
 	}>();
 
 	let editedData = $state<string[]>([]);
+	let showDatePicker = $state<number | null>(null); // 어떤 필드의 날짜 선택기를 보여줄지
+	
+	// DatePicker에서 사용할 날짜 정보
+	let selectedYear = $state(currentYear || new Date().getFullYear());
+	let selectedMonth = $state(currentMonth || new Date().getMonth() + 1);
+	let selectedDay = $state(1);
 
-	// 모달이 열릴 때 데이터 초기화
-	$effect(() => {
+	// 날짜 형식 정규화 함수
+	function normalizeDateFormat(dateStr: string): string {
+		if (!dateStr || dateStr.trim() === '') {
+			return `${currentYear}. ${currentMonth}. 1`;
+		}
+		
+		const trimmed = dateStr.trim();
+		
+		// 이미 연도가 포함된 형식인지 확인 (4자리 숫자로 시작)
+		if (/^\d{4}\./.test(trimmed)) {
+			return trimmed; // 이미 올바른 형식
+		}
+		
+		// 'M. D' 형식인 경우 연도 추가
+		if (/^\d{1,2}\.\s*\d{1,2}$/.test(trimmed)) {
+			return `${currentYear}. ${trimmed}`;
+		}
+		
+		// 기타 경우 기본값 반환
+		return `${currentYear}. ${currentMonth}. 1`;
+	}
+
+	// 초기 데이터 설정 함수
+	function initializeData() {
 		if (isOpen && rowData) {
-			editedData = [...rowData];
+			const newData = [...rowData];
+			// 날짜 및 금액 필드의 형식을 정규화
+			headers.forEach((header, index) => {
+				if (isDateField(header)) {
+					newData[index] = normalizeDateFormat(newData[index] || '');
+				} else if (isAmountField(header)) {
+					newData[index] = parseAmount(newData[index] || '');
+				}
+			});
+			editedData = newData;
+		}
+	}
+
+	// 모달이 열릴 때만 초기화 (안전한 방식)
+	let lastRowIndex = $state<number | null>(null);
+	
+	$effect(() => {
+		// 모달이 새로 열리거나 다른 행을 편집할 때만 초기화
+		if (isOpen && (rowIndex !== lastRowIndex)) {
+			console.log('Initializing data for row:', rowIndex);
+			initializeData();
+			lastRowIndex = rowIndex;
+		} else if (!isOpen) {
+			lastRowIndex = null;
 		}
 	});
 
@@ -44,6 +100,81 @@
 	function handleKeydown(event: KeyboardEvent) {
 		if (event.key === 'Escape') {
 			handleClose();
+			closeDatePicker();
+		}
+	}
+
+	// 날짜 필드인지 확인하는 함수
+	function isDateField(header: string): boolean {
+		return header === '날짜' || header.toLowerCase().includes('date');
+	}
+
+	// 금액 필드인지 확인하는 함수
+	function isAmountField(header: string): boolean {
+		return header === '금액';
+	}
+
+	// 금액 파싱 함수
+	function parseAmount(value: string): string {
+		if (!value) return '';
+		// 숫자와 소수점 외의 모든 문자 제거
+		return value.replace(/[^0-9.]/g, '');
+	}
+
+	// 현재 입력된 날짜에서 연도, 월, 일 파싱
+	function parseCurrentDate(dateStr: string) {
+		if (!dateStr || dateStr.trim() === '') {
+			return { year: currentYear, month: currentMonth, day: 1 };
+		}
+		
+		const trimmed = dateStr.trim();
+		const parts = trimmed.split('.').map(part => part.trim());
+		
+		if (parts.length >= 3) {
+			// YYYY. M. D 형식
+			const year = parseInt(parts[0]) || currentYear;
+			const month = parseInt(parts[1]) || currentMonth;
+			const day = parseInt(parts[2]) || 1;
+			return { year, month, day };
+		} else if (parts.length === 2) {
+			// M. D 형식 (연도 없음)
+			const month = parseInt(parts[0]) || currentMonth;
+			const day = parseInt(parts[1]) || 1;
+			return { year: currentYear, month, day };
+		}
+		
+		return { year: currentYear, month: currentMonth, day: 1 };
+	}
+
+	// 날짜 선택기 열기 (기존 입력값 유지)
+	function openDatePicker(fieldIndex: number) {
+		// 현재 입력된 날짜 파싱하여 DatePicker에 반영할 수 있도록 준비
+		const currentInput = editedData[fieldIndex] || '';
+		console.log('Opening date picker with current input:', currentInput);
+		const parsedDate = parseCurrentDate(currentInput);
+		
+		// 파싱된 날짜 정보를 상태로 저장 (DatePicker에서 사용)
+		selectedYear = parsedDate.year;
+		selectedMonth = parsedDate.month;
+		selectedDay = parsedDate.day;
+		
+		// 마지막으로 showDatePicker 설정 (다른 상태 변경 후에)
+		showDatePicker = fieldIndex;
+		
+		console.log('Date picker opened with:', { selectedYear, selectedMonth, selectedDay });
+	}
+
+	// 날짜 선택기 닫기
+	function closeDatePicker() {
+		showDatePicker = null;
+	}
+
+	// 날짜 선택 핸들러
+	function handleDateSelect(day: number) {
+		if (showDatePicker !== null) {
+			const formattedDate = `${selectedYear}. ${selectedMonth}. ${day}`;
+			editedData[showDatePicker] = formattedDate;
+			closeDatePicker();
 		}
 	}
 </script>
@@ -77,25 +208,49 @@
 								{header || `컬럼 ${index + 1}`}
 							</label>
 							<div class="input-container">
-								<input
-									id="field-{index}"
-									type="text"
-									bind:value={editedData[index]}
-									class="field-input"
-									placeholder={header ? `${header} 값을 입력하세요` : `값을 입력하세요`}
-									disabled={isLoading}
-								/>
-								{#if editedData[index] && editedData[index].trim()}
-									<button
-										class="clear-button"
-										onclick={() => editedData[index] = ''}
-										aria-label="입력값 지우기"
+								{#if isDateField(header)}
+									<!-- 날짜 필드용 특별 입력 -->
+									<div class="date-input-wrapper" onclick={() => openDatePicker(index)}>
+										<div class="date-display field-input date-input" class:placeholder={!editedData[index]}>
+											{editedData[index] || 'YYYY. M. D 형식으로 입력하세요'}
+										</div>
+										<button
+											type="button"
+											class="date-picker-button"
+											onclick={(e) => {
+												e.stopPropagation();
+												openDatePicker(index);
+											}}
+											disabled={isLoading}
+											aria-label="날짜 선택"
+										>
+											<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+												<rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+												<line x1="16" y1="2" x2="16" y2="6"/>
+												<line x1="8" y1="2" x2="8" y2="6"/>
+												<line x1="3" y1="10" x2="21" y2="10"/>
+											</svg>
+										</button>
+									</div>
+								{:else if isAmountField(header)}
+									<input
+										id="field-{index}"
+										type="number"
+										bind:value={editedData[index]}
+										class="field-input"
+										placeholder="숫자만 입력하세요"
 										disabled={isLoading}
-									>
-										<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-											<path d="M18 6L6 18M6 6l12 12"/>
-										</svg>
-									</button>
+									/>
+								{:else}
+									<!-- 일반 텍스트 필드 -->
+									<input
+										id="field-{index}"
+										type="text"
+										bind:value={editedData[index]}
+										class="field-input"
+										placeholder={header ? `${header} 값을 입력하세요` : `값을 입력하세요`}
+										disabled={isLoading}
+									/>
 								{/if}
 							</div>
 						</div>
@@ -134,6 +289,16 @@
 			</div>
 		</div>
 	</div>
+{/if}
+
+<!-- 날짜 선택기 모달 -->
+{#if showDatePicker !== null}
+	<DatePicker 
+		currentYear={selectedYear} 
+		currentMonth={selectedMonth}
+		onDateSelect={handleDateSelect}
+		onClose={closeDatePicker}
+	/>
 {/if}
 
 <style>
@@ -385,6 +550,70 @@
 			transform: rotate(360deg);
 		}
 	}
+
+	/* 날짜 입력 필드 스타일 */
+	.date-input-wrapper {
+		position: relative;
+		display: flex;
+		align-items: center;
+		cursor: pointer;
+		transition: all 0.2s;
+		border-radius: 0.5rem;
+	}
+
+	.date-input-wrapper:hover {
+		background: rgba(59, 130, 246, 0.05);
+	}
+
+	.date-input {
+		padding-right: 3rem;
+	}
+
+	.date-display {
+		color: #374151;
+		min-height: 1.5rem;
+		display: flex;
+		align-items: center;
+		user-select: none;
+	}
+
+	.date-display.placeholder {
+		color: #9ca3af;
+		font-style: italic;
+	}
+
+	.date-input-wrapper:hover .date-display {
+		background: transparent;
+	}
+
+	.date-picker-button {
+		position: absolute;
+		right: 0.75rem;
+		top: 50%;
+		transform: translateY(-50%);
+		width: 2rem;
+		height: 2rem;
+		border: none;
+		background: transparent;
+		color: #6b7280;
+		border-radius: 0.25rem;
+		cursor: pointer;
+		transition: all 0.2s;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+	}
+
+	.date-picker-button:hover {
+		background: #f3f4f6;
+		color: #374151;
+	}
+
+	.date-picker-button:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+
 
 	/* 모바일 반응형 */
 	@media (max-width: 640px) {
