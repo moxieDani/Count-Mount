@@ -3,6 +3,7 @@
 	import { page } from '$app/state';
 	import MonthYearPicker from './MonthYearPicker.svelte';
 	import EditRowModal from './EditRowModal.svelte';
+	import CreateRowModal from './CreateRowModal.svelte';
 
 	// Google Picker API 타입 정의
 	const googlePicker: any = typeof window !== 'undefined' ? (window as any).google : null;
@@ -77,6 +78,9 @@
 	let selectedRowIndex = $state<number | null>(null);
 	let selectedRowData = $state<string[]>([]);
 	let isModalLoading = $state(false);
+	
+	// 행 생성 모달 상태
+	let showCreateModal = $state(false);
 
 	// 셀 클릭 시 편집 모달 열기
 	function openEditModal(rowIndex: number) {
@@ -92,6 +96,89 @@
 		showEditModal = false;
 		selectedRowIndex = null;
 		selectedRowData = [];
+	}
+
+	// 생성 모달 열기
+	function openCreateModal() {
+		console.log('생성 모달 열기 클릭!');
+		showCreateModal = true;
+	}
+
+	// 생성 모달 닫기
+	function closeCreateModal() {
+		showCreateModal = false;
+	}
+
+	// 새 행 생성 처리
+	async function handleCreateRow(event: CustomEvent<string[]>) {
+		const newRowData = event.detail;
+		console.log('새 행 생성:', $state.snapshot(newRowData));
+		
+		if (!session?.accessToken || !spreadsheetId) {
+			alert('인증 정보가 없습니다.');
+			return;
+		}
+
+		try {
+			isModalLoading = true;
+			
+			// 현재 년도/월에 해당하는 시트 이름 찾기 (fetchTableData와 동일한 방식)
+			const sheetName = await findSheetByMonth(currentMonth);
+			if (!sheetName) {
+				alert(`${currentYear}년 스프레드시트에서 ${currentMonth}월에 해당하는 시트를 찾을 수 없습니다.`);
+				return;
+			}
+			
+			console.log('Found sheet name for create:', sheetName);
+			
+			// API 호출
+			const response = await fetch(`/api/sheets/${spreadsheetId}/append`, {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+					'Authorization': `Bearer ${session.accessToken}`
+				},
+				body: JSON.stringify({
+					sheetName: sheetName,
+					values: newRowData
+				})
+			});
+
+			if (response.ok) {
+				const result = await response.json();
+				console.log('행 추가 성공:', $state.snapshot(result));
+				
+				// 모달 닫기
+				closeCreateModal();
+				
+				// 데이터 새로고침 (정렬 후 업데이트된 데이터 반영)
+				await fetchTableData();
+				
+				if (result.sorted) {
+					alert('새로운 데이터가 추가되고 정렬되었습니다.');
+				} else {
+					alert('새로운 데이터가 추가되었습니다. (정렬 실패)');
+				}
+			} else {
+				const errorData = await response.json();
+				console.error('행 추가 실패:', errorData);
+				
+				if (response.status === 401) {
+					// 토큰 만료 시 페이지 새로고침으로 자동 재인증
+					alert('세션이 만료되었습니다. 페이지를 새로고침합니다.');
+					location.reload();
+					return;
+				}
+				
+				alert(`데이터 추가에 실패했습니다: ${errorData.error || '알 수 없는 오류'}`);
+			}
+			
+		} catch (error) {
+			console.error('데이터 추가 오류:', error);
+			alert('데이터 추가 중 오류가 발생했습니다.');
+		} finally {
+			isModalLoading = false;
+		}
 	}
 
 	// 모달에서 저장 이벤트 처리
@@ -648,6 +735,16 @@
 				>
 					🔄
 				</button>
+				<button 
+					onclick={() => {
+						console.log('버튼 클릭 이벤트 발생!');
+						openCreateModal();
+					}} 
+					class="nav-btn create-btn"
+					title="새 행 추가"
+				>
+					➕
+				</button>
 			</h3>
 			<div class="expense-info">
 				<span class="expense-badge">총 지출: {formatNumber(calculateTotalExpense())}원</span>
@@ -804,6 +901,19 @@
 	on:close={closeEditModal}
 	on:save={handleModalSave}
 	on:delete={handleModalDelete}
+/>
+
+<!-- 행 생성 모달 -->
+<CreateRowModal
+	isOpen={showCreateModal}
+	headers={tableData?.headers || []}
+	isLoading={isModalLoading}
+	currentYear={currentYear}
+	currentMonth={currentMonth}
+	spreadsheetId={spreadsheetId}
+	accessToken={session?.accessToken}
+	on:close={closeCreateModal}
+	on:save={handleCreateRow}
 />
 
 <style>
@@ -1117,6 +1227,28 @@
 		border-color: transparent;
 		transform: scale(1.2);
 		box-shadow: 0 2px 4px rgba(76, 114, 175, 0.3);
+	}
+
+	.create-btn {
+		background: transparent;
+		border-color: transparent;
+		font-size: 1rem !important;
+		width: 20px;
+		height: 20px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		transform: scale(1.2);
+		box-shadow: 0 2px 4px rgba(34, 139, 34, 0.3);
+		color: #228B22;
+	}
+
+	.create-btn:hover:not(:disabled) {
+		background: transparent;
+		border-color: transparent;
+		transform: scale(1.3);
+		box-shadow: 0 2px 6px rgba(34, 139, 34, 0.4);
+		color: #1e7e1e;
 	}
 
 	.current-month-indicator {
