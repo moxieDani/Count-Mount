@@ -727,23 +727,13 @@
 		<div class="header-info">
 			<h3>
 				📊 {currentYear}년 {monthNames[currentMonth - 1]}
-								<button 
+				<button 
 					onclick={() => fetchTableData()} 
 					class="nav-btn refresh-btn"
 					disabled={isLoading}
 					title="새로고침"
 				>
 					🔄
-				</button>
-				<button 
-					onclick={() => {
-						console.log('버튼 클릭 이벤트 발생!');
-						openCreateModal();
-					}} 
-					class="nav-btn create-btn"
-					title="새 행 추가"
-				>
-					➕
 				</button>
 			</h3>
 			<div class="expense-info">
@@ -761,7 +751,8 @@
 				</span>
 			</div>
 		{/if}
-	</div>
+		</div>
+		
 	</div>
 
 
@@ -798,6 +789,22 @@
 					title="다음 달"
 				>
 					다음 달 ▶
+				</button>
+				
+				<!-- 지출 추가 버튼 -->
+				<button 
+					onclick={() => {
+						console.log('버튼 클릭 이벤트 발생!');
+						openCreateModal();
+					}} 
+					class="primary-create-btn"
+					disabled={isLoading}
+					title="새로운 지출 항목 추가"
+				>
+					<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+						<path d="M12 5v14M5 12h14"/>
+					</svg>
+					<span>지출 추가</span>
 				</button>
 			</div>
 			
@@ -1249,6 +1256,54 @@
 		transform: scale(1.3);
 		box-shadow: 0 2px 6px rgba(34, 139, 34, 0.4);
 		color: #1e7e1e;
+	}
+
+	/* 새로운 큰 생성 버튼 스타일 */
+	.header-actions {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+	}
+
+	.primary-create-btn {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+		background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+		color: white;
+		border: none;
+		border-radius: 8px;
+		padding: 10px 16px;
+		font-size: 0.9rem;
+		font-weight: 600;
+		cursor: pointer;
+		transition: all 0.2s ease;
+		box-shadow: 0 3px 6px rgba(76, 175, 80, 0.3);
+		white-space: nowrap;
+		margin-left: 1rem;
+	}
+
+	.primary-create-btn:hover:not(:disabled) {
+		background: linear-gradient(135deg, #45a049 0%, #3d8b40 100%);
+		transform: translateY(-2px);
+		box-shadow: 0 6px 12px rgba(76, 175, 80, 0.4);
+	}
+
+	.primary-create-btn:active {
+		transform: translateY(0);
+		box-shadow: 0 2px 4px rgba(76, 175, 80, 0.3);
+	}
+
+	.primary-create-btn:disabled {
+		background: #cccccc;
+		color: #888888;
+		cursor: not-allowed;
+		transform: none;
+		box-shadow: none;
+	}
+
+	.primary-create-btn svg {
+		stroke-width: 2.5;
 	}
 
 	.current-month-indicator {
@@ -2225,6 +2280,23 @@
 			padding: 8px 2px;
 			font-size: 0.75rem;
 			min-height: 36px;
+		}
+
+		/* 네비게이션 버튼 모바일 스타일 */
+		.month-navigation {
+			flex-direction: column;
+			gap: 0.75rem;
+			align-items: stretch;
+		}
+
+		.primary-create-btn {
+			margin-left: 0;
+			width: 100%;
+			justify-content: center;
+			padding: 14px 20px;
+			font-size: 1rem;
+			font-weight: 700;
+			order: -1; /* 네비게이션 버튼들 위로 이동 */
 		}
 	}
 </style>
