@@ -23,6 +23,7 @@
 	"dependencies": {
 		"@auth/core": "^0.40.0",
 		"@auth/sveltekit": "^1.10.0",
+		"@sveltejs/adapter-vercel": "^5.10.2",
 		"google-auth-library": "^10.3.0",
 		"googleapis": "^159.0.0"
 	}
