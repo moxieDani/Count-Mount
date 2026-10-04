@@ -2,6 +2,7 @@
 	import favicon from '$lib/assets/favicon.svg';
 	import { page } from '$app/stores';
 	import { browser } from '$app/environment';
+	import { invalidateAll } from '$app/navigation';
 	import { onMount } from 'svelte';
 
 	let { children } = $props();
@@ -104,6 +105,9 @@
 		document.addEventListener('visibilitychange', () => {
 			if (document.visibilityState === 'hidden') {
 				saveSession();
+			} else if (document.visibilityState === 'visible') {
+				// 앱으로 돌아오면 세션을 다시 받아와 만료된 access token을 서버에서 갱신
+				invalidateAll();
 			}
 		});
 

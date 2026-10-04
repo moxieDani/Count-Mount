@@ -2,6 +2,16 @@ import { SvelteKitAuth } from "@auth/sveltekit"
 import Google from "@auth/sveltekit/providers/google"
 import { env } from '$env/dynamic/private'
 
+// ALLOWED_EMAILS(쉼표 구분)에 등록된 계정만 사용 가능. 비어 있으면 모두 거부한다.
+function isAllowedEmail(email: string | null | undefined) {
+  if (!email) return false;
+  const allowedEmails = (env.ALLOWED_EMAILS ?? '')
+    .split(',')
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean);
+  return allowedEmails.includes(email.toLowerCase());
+}
+
 async function refreshAccessToken(token: any) {
   try {
     const response = await fetch("https://oauth2.googleapis.com/token", {
@@ -18,6 +28,11 @@ async function refreshAccessToken(token: any) {
     const newTokens = await response.json();
 
     if (!response.ok) {
+      // refresh token이 만료/철회됨: 세션을 지워 다시 로그인하도록 한다
+      if (newTokens.error === "invalid_grant") {
+        console.error("Refresh token expired or revoked", newTokens);
+        return null;
+      }
       throw newTokens;
     }
 
@@ -26,6 +41,7 @@ async function refreshAccessToken(token: any) {
       accessToken: newTokens.access_token,
       expiresAt: Date.now() + newTokens.expires_in * 1000,
       refreshToken: newTokens.refresh_token ?? token.refreshToken, // Fall back to old refresh token
+      error: undefined,
     };
   } catch (error) {
     console.error("Error refreshing access token", error);
@@ -53,7 +69,15 @@ export const { handle } = SvelteKitAuth({
   secret: env.AUTH_SECRET,
   trustHost: env.AUTH_TRUST_HOST === 'true',
   callbacks: {
+    async signIn({ profile }) {
+      return profile?.email_verified === true && isAllowedEmail(profile.email);
+    },
     async jwt({ token, account }) {
+      // 허용 목록에서 빠진 계정의 기존 세션도 끊는다
+      if (!isAllowedEmail(token.email)) {
+        return null;
+      }
+
       if (account) {
         token.accessToken = account.access_token;
         token.refreshToken = account.refresh_token;

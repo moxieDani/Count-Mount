@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { page } from '$app/state'
+	import { invalidateAll } from '$app/navigation'
+	import { signIn } from '@auth/sveltekit/client'
 	import LoginButton from '$lib/components/LoginButton.svelte'
 	import HeaderAuth from '$lib/components/HeaderAuth.svelte'
 	import SpreadsheetTable from '$lib/components/SpreadsheetTable.svelte'
@@ -9,6 +11,9 @@
 	let currentSpreadsheetId = $state<string>('');
 	let isLoading = $state(false);
 	let error = $state('');
+	let isAuthError = $state(false);
+
+	class AuthExpiredError extends Error {}
 
 	// 자동 스프레드시트 찾기 함수
 	async function findCurrentYearSpreadsheet(): Promise<string | null> {
@@ -46,6 +51,10 @@
 					}
 				});
 
+				if (response.status === 401) {
+					throw new AuthExpiredError();
+				}
+
 				if (response.ok) {
 					const data = await response.json();
 					const files = data.files || [];
@@ -68,14 +77,21 @@
 
 			return null;
 		} catch (err) {
+			if (err instanceof AuthExpiredError) throw err;
 			console.error('Error searching for current year spreadsheet:', err);
 			return null;
 		}
 	}
 
+	// $effect가 추적하지 않도록 일반 변수로 중복 로드를 막는다
+	let loadInFlight = false;
+
 	async function loadCurrentYearSpreadsheet() {
+		if (loadInFlight) return;
+		loadInFlight = true;
 		isLoading = true;
 		error = '';
+		isAuthError = false;
 
 		try {
 			const spreadsheetId = await findCurrentYearSpreadsheet();
@@ -86,11 +102,23 @@
 				error = `${new Date().getFullYear()}년 가계부 스프레드시트를 찾을 수 없습니다.`;
 			}
 		} catch (err) {
-			error = '스프레드시트 로드 중 오류가 발생했습니다.';
+			if (err instanceof AuthExpiredError) {
+				isAuthError = true;
+				error = '로그인 정보가 만료되었습니다. 다시 시도하거나 다시 로그인해주세요.';
+			} else {
+				error = '스프레드시트 로드 중 오류가 발생했습니다.';
+			}
 			console.error('Error loading spreadsheet:', err);
 		} finally {
 			isLoading = false;
+			loadInFlight = false;
 		}
+	}
+
+	// 서버에서 세션을 다시 받아와(필요 시 토큰 갱신) 재시도
+	async function retry() {
+		await invalidateAll();
+		await loadCurrentYearSpreadsheet();
 	}
 
 	// 세션이 변경될 때마다 자동으로 스프레드시트 로드
@@ -120,9 +148,14 @@
 					<div class="error-icon">⚠️</div>
 					<h3>오류 발생</h3>
 					<p>{error}</p>
-					<button onclick={loadCurrentYearSpreadsheet} class="retry-btn">
+					<button onclick={retry} class="retry-btn">
 						다시 시도
 					</button>
+					{#if isAuthError}
+						<button onclick={() => signIn('google')} class="retry-btn">
+							다시 로그인
+						</button>
+					{/if}
 				</div>
 			{:else if currentSpreadsheetId}
 				<SpreadsheetTable 
@@ -257,6 +290,10 @@
 		font-weight: 500;
 		cursor: pointer;
 		transition: all 0.2s ease;
+	}
+
+	.retry-btn + .retry-btn {
+		margin-top: 0.75rem;
 	}
 
 	.retry-btn:hover {

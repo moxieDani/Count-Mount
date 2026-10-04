@@ -52,6 +52,9 @@ AUTH_SECRET=your_random_secret_string_here
 
 # Trusted Host
 AUTH_TRUST_HOST=true
+
+# 로그인을 허용할 Google 계정 이메일 (쉼표로 구분). 비어 있으면 아무도 로그인할 수 없음
+ALLOWED_EMAILS=you@gmail.com,spouse@gmail.com
 ```
 
 ### 5. AUTH_SECRET 생성 방법
@@ -139,6 +142,17 @@ npm run preview
 ## 배포
 
 배포 시 환경 변수를 설정하고 Authorized redirect URIs에 실제 도메인을 추가해야 합니다.
+
+### OAuth 앱 게시 상태
+
+OAuth 동의 화면이 **테스트** 상태이면 Google이 refresh token을 7일 후 만료시켜 매주 다시 로그인해야 합니다. 로그인 제한은 `ALLOWED_EMAILS`가 담당하므로 앱을 **프로덕션**으로 게시해도 됩니다.
+
+1. `ALLOWED_EMAILS`를 설정하고 배포 (게시 전에 먼저 해야 함)
+2. Google Auth Platform → **Branding**: 홈페이지(`https://<도메인>`), 개인정보처리방침(`https://<도메인>/privacy.html`), Authorized domains(`<도메인>`) 입력. 앱 로고는 올리지 않음 (올리면 인증 심사 대상)
+3. Google Auth Platform → **Audience** → **Publish app**
+4. 모든 사용자가 로그아웃 후 다시 로그인 (테스트 상태에서 받은 토큰은 계속 7일 후 만료됨)
+
+인증 심사를 받지 않은 앱이므로 로그인 시 "Google에서 확인하지 않은 앱" 경고가 나오며, **고급 → 이동**을 누르면 됩니다.
 
 ## 보안 주의사항
 
