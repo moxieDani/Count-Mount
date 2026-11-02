@@ -1,5 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import { findDuplicateRow } from '$lib/ledger/duplicate';
 
 export const POST: RequestHandler = async ({ params, request }) => {
 	const { spreadsheetId } = params;
@@ -13,7 +14,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
 	
 	try {
 		const requestData = await request.json();
-		const { sheetName, values } = requestData;
+		const { sheetName, values, headers } = requestData;
 		
 		console.log('Received request data:', { sheetName, valuesLength: values?.length });
 		
@@ -87,6 +88,14 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		
 		const currentData = await getResponse.json();
 		const currentValues = currentData.values || [];
+
+		// 같은 내역(날짜·금액·지출내용)이 이미 있으면 추가하지 않는다
+		if (Array.isArray(headers)) {
+			const duplicate = findDuplicateRow(headers, currentValues, values);
+			if (duplicate >= 0) {
+				return json({ error: 'duplicate', row: 27 + duplicate, existing: currentValues[duplicate] }, { status: 409 });
+			}
+		}
 		
 		// Step 2: 빈 행 찾기 (Y 컬럼이 비어있는 첫 번째 행)
 		let emptyRowIndex = -1;

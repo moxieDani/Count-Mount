@@ -140,7 +140,8 @@
 				},
 				body: JSON.stringify({
 					sheetName: sheetName,
-					values: newRowData
+					values: newRowData,
+					headers: tableData?.headers ?? []
 				})
 			});
 
@@ -162,6 +163,12 @@
 			} else {
 				const errorData = await response.json();
 				console.error('행 추가 실패:', errorData);
+
+				if (response.status === 409) {
+					const existing: string[] = errorData.existing ?? [];
+					alert(`이미 같은 내역이 입력되어 있어 추가하지 않았습니다.\n\n${existing.filter(Boolean).join(' · ')}`);
+					return;
+				}
 				
 				if (response.status === 401) {
 					// 토큰 만료 시 페이지 새로고침으로 자동 재인증

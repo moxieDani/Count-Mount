@@ -4,6 +4,7 @@ import { PARSER_CASES } from './parser.cases';
 import { extractPayments, normalizeOcr, GAP_MARK } from './extract';
 import { classifyMerchant } from './classify';
 import { ledgerFieldOf, toLedgerFields } from './toRow';
+import { findDuplicateRow } from '../ledger/duplicate';
 
 // 실제 결제 정보는 넣지 않는다: 가맹점·카드 끝자리·계좌는 모두 가짜 값
 const BANK_OUT = '[출금] 테스트식당 12,300원 1111-222-333***계좌 잔액 100,000원 01/03 12:00:09';
@@ -144,5 +145,29 @@ describe('ledgerFieldOf', () => {
 		['정산', null]
 	])('"%s" → %s', (header, kind) => {
 		expect(ledgerFieldOf(header)).toBe(kind);
+	});
+});
+
+describe('findDuplicateRow', () => {
+	const headers = ['날짜', '지출 내용', '결제방식', '계정', '금액', '비고'];
+	// 시트에서 읽은 값은 표시 형식 그대로 온다
+	const rows = [
+		['10. 30', '다른가게', '우리카드', '외식', '₩5,000', ''],
+		['10. 31', '테스트 와인', '삼성카드', '', '₩126,000', '']
+	];
+
+	it('날짜·금액·지출내용이 같으면 같은 내역 (표시 형식·띄어쓰기 무시)', () => {
+		expect(findDuplicateRow(headers, rows, ['2026. 10. 31', '테스트와인', '', '', '126000', ''])).toBe(1);
+	});
+
+	it('하나라도 다르면 새 내역', () => {
+		expect(findDuplicateRow(headers, rows, ['2026. 10. 31', '테스트와인', '', '', '12600', ''])).toBe(-1);
+		expect(findDuplicateRow(headers, rows, ['2026. 10. 30', '테스트와인', '', '', '126000', ''])).toBe(-1);
+		expect(findDuplicateRow(headers, rows, ['2026. 10. 31', '다른가게', '', '', '126000', ''])).toBe(-1);
+	});
+
+	it('비교할 칸이 비어 있거나 헤더에 없으면 검사하지 않는다', () => {
+		expect(findDuplicateRow(headers, rows, ['2026. 10. 31', '', '', '', '126000', ''])).toBe(-1);
+		expect(findDuplicateRow(['날짜', '금액'], [['10. 31', '126000']], ['2026. 10. 31', '126000'])).toBe(-1);
 	});
 });
