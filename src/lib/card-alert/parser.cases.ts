@@ -1,0 +1,36 @@
+// card_sms_parser 회귀 테스트 케이스 (test_card_sms_parser.py 와 같은 30건).
+// 공개 저장소이므로 실제 결제 문자는 넣지 않는다: 공개 자료의 예시 문구와 가짜 값만 쓴다.
+import type { CardAlert } from './parser';
+
+export const PARSER_CASES: { label: string; text: string; expected: Partial<CardAlert> }[] = [
+	{ label: "KB 2026-10 kin8670z", text: "[Web발신]\nKB국민카드6009승인\n김*형님\n65,000원 일시불\n10/18 10:48\n신세계 하남점\n누적 1,234,000원", expected: {"card": "KB국민", "card_suffix": "6009", "name": "김*형", "amount": 65000, "months": 0, "datetime": "10/18 10:48", "merchant": "신세계 하남점"} },
+	{ label: "KB 할부 card-sms-bot", text: "[Web발신]\nKB국민카드5678승인\n김*수님\n309,980원 05개월\n01/21 13:29\n삼성화재\n누적500,000원", expected: {"card": "KB국민", "card_suffix": "5678", "amount": 309980, "months": 5, "merchant": "삼성화재"} },
+	{ label: "KB 취소 card-sms-bot", text: "[Web발신]\nKB국민카드1234취소\n김*수님\n129,857원\n02/08 23:00\n마켓컬리\n누적670,000원", expected: {"card": "KB국민", "cancel": true, "amount": 129857, "merchant": "마켓컬리"} },
+	{ label: "KB 띄어쓰기 sobicut", text: "[Web발신]\nKB국민카드 1004승인\n전*안님\n77,900원 일시불\n08/12 23:17\n구주 서면점\n누적101,800원", expected: {"card": "KB국민", "card_suffix": "1004", "name": "전*안", "amount": 77900, "merchant": "구주 서면점"} },
+	{ label: "KB 알림톡형 sobicut", text: "KB국민카드0093\n승인\n6,800 원(일시불)\n씨유(CU) 자양한솔점\n고객명 유*원님\n승인시각 08/22 23:14\n누적 100,000원", expected: {"card": "KB국민", "card_suffix": "0093", "name": "유*원", "amount": 6800, "months": 0, "datetime": "08/22 23:14", "merchant": "씨유(CU) 자양한솔점"} },
+	{ label: "KB 한줄 stravinest", text: "[Web발신] KB국민카드0038승인 제*현님 12,900원 일시불 02/08 12:27 갤러리아광교점( 누적1,000원", expected: {"card": "KB국민", "card_suffix": "0038", "amount": 12900, "merchant": "갤러리아광교점("} },
+	{ label: "롯데 2026-08 seoyeon", text: "[Web발신]\n이스타항공 주\n1,329,900원 승인\n심*현 롯데8*7*\n일시불 08/19 13:14\n누적1,375,750원", expected: {"card": "롯데", "card_suffix": "8*7*", "name": "심*현", "amount": 1329900, "months": 0, "datetime": "08/19 13:14", "merchant": "이스타항공 주"} },
+	{ label: "롯데 2026-09 widget", text: "씨유(CU)반달섬미켈란\n4,500원 승인\n김*준 디지로카 런던 6*7*\n일시불 09/11 21:44\n누적 537,400원", expected: {"card": "롯데", "card_suffix": "6*7*", "name": "김*준", "amount": 4500, "datetime": "09/11 21:44", "merchant": "씨유(CU)반달섬미켈란"} },
+	{ label: "롯데 취소 widget", text: "가맹점\n4,500원 승인취소\n09/11 21:44", expected: {"card": "롯데", "cancel": true, "amount": 4500, "merchant": "가맹점"} },
+	{ label: "롯데 공식예시(구)", text: "롯데OO(1*2*) 75,000원 일시불 08/16 10:30 롯데백화점 본점 누적 754,000원", expected: {"card": "롯데", "card_suffix": "1*2*", "amount": 75000, "merchant": "롯데백화점 본점"} },
+	{ label: "현대 2026-06 auto-ledger", text: "[Web발신]\n현대카드 승인\n홍*동\n4,000원 일시불\n06/05 19:09\n가맹점명\n누적123,456원", expected: {"card": "현대", "name": "홍*동", "amount": 4000, "months": 0, "datetime": "06/05 19:09", "merchant": "가맹점명"} },
+	{ label: "현대 2026-06 the Red", text: "[Web발신]\n현대카드 the Red 승인\n박*주\n13,200원 일시불\n06/13 20:08\n버거킹성복역\n누적3,747,530원", expected: {"card": "현대", "name": "박*주", "amount": 13200, "merchant": "버거킹성복역"} },
+	{ label: "현대 2026-04 MM", text: "[Web발신]\n현대카드MM 승인\n함*영\n9,712원 일시불\n04/07 15:29\n교보문고\n누적 12,000원", expected: {"card": "현대", "name": "함*영", "amount": 9712, "merchant": "교보문고"} },
+	{ label: "현대 할부 card-sms-bot", text: "[Web발신]\n현대카드 M 승인\n박*준\n309,000원 03개월\n03/04 23:47\n애플\n누적600,000원", expected: {"card": "현대", "amount": 309000, "months": 3, "merchant": "애플"} },
+	{ label: "현대 취소 card-sms-bot", text: "[Web발신]\n현대카드 M 취소\n박*준\n22,800원\n03/04 23:55\n쿠팡\n누적280,000원", expected: {"card": "현대", "cancel": true, "amount": 22800, "merchant": "쿠팡"} },
+	{ label: "현대 한줄 2026-08", text: "[Web발신] 현대카드M 승인 정*구 100,000원 일시불 08/08 09:48 대신주유소 누적669,523원", expected: {"card": "현대", "name": "정*구", "amount": 100000, "datetime": "08/08 09:48", "merchant": "대신주유소"} },
+	{ label: "현대 제휴 한줄", text: "[Web발신] 네이버 현대카드 승인 제*현 2,000원 일시불 02/08 12:02 아쿠아플라넷주식 누적437,437원", expected: {"card": "현대", "name": "제*현", "amount": 2000, "merchant": "아쿠아플라넷주식"} },
+	{ label: "현대 법인 2026-08", text: "[Web발신]\n[MY COMPANY] 승인\n9427 김*환님\n08/13 11:42\n14,000원 일시불\n루나아시아", expected: {"card_suffix": "9427", "name": "김*환", "amount": 14000, "datetime": "08/13 11:42", "merchant": "루나아시아"} },
+	{ label: "현대 구(2015)", text: "[Web발신]\n[현대카드]-승인\n김재*님\n1,500원(일시불)\n마노핀익스프레스신림\n누적:354,220원", expected: {"card": "현대", "name": "김재*", "amount": 1500, "datetime": null, "merchant": "마노핀익스프레스신림"} },
+	{ label: "우리 신용 2026-06 실제", text: "[Web발신]\n우리(0157)승인\n함*영님\n10,980원 일시불\n06/23 20:12\n쿠팡(쿠페이)\n누적728,811원", expected: {"card": "우리", "card_suffix": "0157", "name": "함*영", "amount": 10980, "months": 0, "merchant": "쿠팡(쿠페이)"} },
+	{ label: "우리 가맹점 공백", text: "[Web발신]\n우리(0157)승인\n함*영님\n5,500원 일시불\n06/22 08:10\n메가엠지씨커피 응암점\n누적100,000원", expected: {"merchant": "메가엠지씨커피 응암점"} },
+	{ label: "우리 해외 2026-07", text: "[Web발신]\n우리(0157)해외승인\n함*영님\nUSD 17.99\n07/12 14:41\nGOOGLE *Yo", expected: {"card": "우리", "overseas": true, "foreign": "USD 17.99", "amount": null, "merchant": "GOOGLE *Yo"} },
+	{ label: "우리 구포맷 2026-04", text: "[일시불.승인(0157)]04/06 23:15\n5,080원 / 누적:1,493,167원\n쿠팡(쿠페이)", expected: {"card_suffix": "0157", "amount": 5080, "months": 0, "datetime": "04/06 23:15", "merchant": "쿠팡(쿠페이)"} },
+	{ label: "우리 알림톡 sobicut", text: "- 우리카드 이용안내\n우리(0479)승인\n김*환님\n84,000원 일시불\n09/05 19:19\n양평해장국\n누적830,630원", expected: {"card": "우리", "card_suffix": "0479", "amount": 84000, "merchant": "양평해장국"} },
+	{ label: "우리 체크 형식(가짜 값)", text: "[Web발신]\n우리카드(5678) 체크승인\n홍*동님\n12,300원\n01/03 12:00\n쿠팡", expected: {"card": "우리", "card_suffix": "5678", "is_check": true, "amount": 12300, "merchant": "쿠팡"} },
+	{ label: "삼성 형식(가짜 값)", text: "[Web발신]\n삼성1234승인 홍*동\n100,000원 일시불\n01/02 10:00 테스트의원", expected: {"card": "삼성", "card_suffix": "1234", "name": "홍*동", "amount": 100000, "merchant": "테스트의원"} },
+	{ label: "삼성 취소 seoyeon", text: "[Web발신]\n삼성8778취소 심*현\r\n-54,350원 일시불\r\n08/25 20:54 쿠팡\r\n누적5,452,944원", expected: {"card": "삼성", "cancel": true, "amount": 54350, "merchant": "쿠팡"} },
+	{ label: "삼성 한줄 콤마없음", text: "삼성8778승인 심*현 21260원 일시불 08/23 21:18 쿠팡누적5401264원", expected: {"card": "삼성", "amount": 21260, "merchant": "쿠팡"} },
+	{ label: "BC 농협(2015)", text: "[Web발신]\n농협BC(4*8*)오*름님.\n04/14 11:51.\n일시불81,400원.\n누적금액679,780원.\n버거킹 판교유스페", expected: {"card": "BC(농협)", "card_suffix": "4*8*", "name": "오*름", "amount": 81400, "merchant": "버거킹 판교유스페"} },
+	{ label: "BC 씨티 체크(2015)", text: "[체크.승인]\n22,000원\n씨티BC(1*9*)김*정님\n01/23 12:34\n매일식당", expected: {"card": "BC(씨티)", "name": "김*정", "amount": 22000, "merchant": "매일식당"} },
+];

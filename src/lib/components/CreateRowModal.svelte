@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { createEventDispatcher } from 'svelte';
 	import DatePicker from './DatePicker.svelte';
+	import { extractPayments, type PaymentCandidate } from '$lib/card-alert/extract';
+	import { toLedgerFields } from '$lib/card-alert/toRow';
 	
 	const dispatch = createEventDispatcher();
 	
@@ -89,12 +91,129 @@
 		}
 	});
 
+	// 카드 결제 알림 붙여넣기 (문자 텍스트 또는 스크린샷)
+	let pasteStatus = $state('');
+	let pasteNotes = $state<string[]>([]);
+	let isReadingPaste = $state(false);
+	let showPasteBox = $state(false);
+	let pasteCandidates = $state<PaymentCandidate[]>([]);
+
+	function resetPaste() {
+		pasteStatus = '';
+		pasteNotes = [];
+		isReadingPaste = false;
+		showPasteBox = false;
+		pasteCandidates = [];
+	}
+
+	async function readPaste(source: Blob | string) {
+		isReadingPaste = true;
+		pasteNotes = [];
+		pasteCandidates = [];
+		try {
+			let candidates: PaymentCandidate[];
+			if (typeof source === 'string') {
+				candidates = extractPayments(source);
+			} else {
+				pasteStatus = '스크린샷 글자 인식 중… (처음에는 인식 모델을 내려받아 오래 걸립니다)';
+				const { readPaymentsFromImage } = await import('$lib/card-alert/ocr');
+				candidates = await readPaymentsFromImage(source);
+			}
+			if (candidates.length === 0) {
+				pasteStatus = '카드 결제 내용을 찾지 못했습니다.';
+			} else if (candidates.length === 1) {
+				applyCandidate(candidates[0]);
+			} else {
+				// 서로 다른 결제가 여러 건이면 어느 것을 입력할지 먼저 묻는다
+				pasteStatus = `결제 내역이 ${candidates.length}건 보입니다. 어떤 것을 입력할까요?`;
+				pasteCandidates = candidates;
+			}
+		} catch (error) {
+			console.error('Failed to read pasted payment:', error);
+			pasteStatus = '붙여넣은 내용을 읽지 못했습니다.';
+		} finally {
+			isReadingPaste = false;
+		}
+	}
+
+	async function pasteFromClipboard() {
+		if (!navigator.clipboard?.read) {
+			pasteStatus = '이 브라우저에서는 바로 읽을 수 없습니다. 아래 칸을 길게 눌러 붙여넣으세요.';
+			showPasteBox = true;
+			return;
+		}
+		try {
+			const items = await navigator.clipboard.read();
+			for (const item of items) {
+				const imageType = item.types.find((t) => t.startsWith('image/'));
+				if (imageType) return readPaste(await item.getType(imageType));
+			}
+			for (const item of items) {
+				if (item.types.includes('text/plain')) return readPaste(await (await item.getType('text/plain')).text());
+			}
+			pasteStatus = '클립보드가 비어 있습니다.';
+		} catch (error) {
+			console.error('Clipboard read failed:', error);
+			pasteStatus = '클립보드를 읽지 못했습니다. 아래 칸을 길게 눌러 붙여넣으세요.';
+			showPasteBox = true;
+		}
+	}
+
+	function handlePasteEvent(event: ClipboardEvent) {
+		event.preventDefault();
+		const data = event.clipboardData;
+		if (!data) return;
+		const image = [...data.files].find((f) => f.type.startsWith('image/'));
+		readPaste(image ?? data.getData('text/plain'));
+	}
+
+	function describeCandidate(c: PaymentCandidate) {
+		const p = c.parsed;
+		const amount = p.amount != null ? `${p.amount.toLocaleString('ko-KR')}원` : p.foreign;
+		const card = [p.card, p.card_suffix, p.is_check ? '체크' : ''].filter(Boolean).join(' ');
+		return [amount, p.merchant, p.datetime, card].filter(Boolean).join(' · ');
+	}
+
+	function applyCandidate(c: PaymentCandidate) {
+		const fields = toLedgerFields(c.parsed, {
+			viewYear: currentYear,
+			viewMonth: currentMonth,
+			paymentOptions: paymentMethodOptions,
+			accountOptions
+		});
+		const row = [...newRowData];
+		headers.forEach((header: string, index: number) => {
+			if (isDateField(header)) {
+				if (fields.date) row[index] = fields.date;
+			} else if (isAmountField(header)) {
+				row[index] = fields.amount;
+			} else if (isPaymentMethodField(header)) {
+				if (fields.payment) row[index] = fields.payment;
+			} else if (isAccountField(header)) {
+				if (fields.account && accountOptions.includes(fields.account)) row[index] = fields.account;
+			} else if (isMerchantField(header)) {
+				row[index] = fields.merchant;
+			} else if (isNoteField(header)) {
+				if (fields.note) row[index] = fields.note;
+			}
+		});
+		newRowData = row;
+		pasteCandidates = [];
+		showPasteBox = false;
+		pasteStatus = '붙여넣은 내용으로 채웠습니다. 저장하기 전에 확인하세요.';
+		pasteNotes = [
+			...(c.sources.length > 1 ? [`같은 결제 알림 ${c.sources.length}개(${c.sources.join(', ')})를 하나로 합쳤습니다.`] : []),
+			...fields.warnings
+		];
+	}
+
 	function handleClose() {
 		dispatch('close');
 		// 데이터 초기화
 		newRowData = [];
 		paymentMethodOptions = [];
 		accountOptions = [];
+		resetPaste();
 	}
 
 	function handleCreate() {
@@ -128,6 +247,16 @@
 	// 계정 필드인지 확인하는 함수
 	function isAccountField(header: string): boolean {
 		return header === '계정';
+	}
+
+	// 지출내용(가맹점) 필드인지 확인하는 함수
+	function isMerchantField(header: string): boolean {
+		return header === '지출내용';
+	}
+
+	// 비고 필드인지 확인하는 함수
+	function isNoteField(header: string): boolean {
+		return header === '비고';
 	}
 
 	// 금액 파싱 함수
@@ -302,6 +431,42 @@
 
 			<!-- 모달 콘텐츠 -->
 			<div class="modal-content">
+				<div class="paste-section">
+					<button
+						type="button"
+						class="btn paste-button"
+						onclick={pasteFromClipboard}
+						disabled={isLoading || isReadingPaste}
+					>
+						{#if isReadingPaste}
+							<div class="spinner"></div>
+						{/if}
+						입력 정보 붙여넣기
+					</button>
+					{#if showPasteBox}
+						<div
+							class="paste-box"
+							contenteditable="true"
+							role="textbox"
+							tabindex="0"
+							aria-label="카드 결제 문자 또는 스크린샷 붙여넣기"
+							onpaste={handlePasteEvent}
+						>
+							여기를 길게 눌러 붙여넣기
+						</div>
+					{/if}
+					{#if pasteStatus}
+						<p class="paste-status">{pasteStatus}</p>
+					{/if}
+					{#each pasteCandidates as candidate}
+						<button type="button" class="paste-candidate" onclick={() => applyCandidate(candidate)}>
+							{describeCandidate(candidate)}
+						</button>
+					{/each}
+					{#each pasteNotes as note}
+						<p class="paste-note">{note}</p>
+					{/each}
+				</div>
 				<div class="form-container">
 					{#each headers as header, index}
 						<div class="form-field">
@@ -539,6 +704,68 @@
 		display: flex;
 		flex-direction: column;
 		gap: 1rem;
+	}
+
+	.paste-section {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+		margin-bottom: 1.25rem;
+		padding-bottom: 1.25rem;
+		border-bottom: 1px solid #e5e7eb;
+	}
+
+	.paste-button {
+		width: 100%;
+		background: #2196f3;
+		color: white;
+	}
+
+	.paste-button:hover:not(:disabled) {
+		background: #1976d2;
+	}
+
+	.paste-box {
+		min-height: 3.5rem;
+		padding: 0.75rem;
+		border: 2px dashed #d1d5db;
+		border-radius: 0.5rem;
+		color: #6b7280;
+		font-size: 0.875rem;
+	}
+
+	.paste-box:focus {
+		outline: none;
+		border-color: #2196f3;
+	}
+
+	.paste-status {
+		margin: 0;
+		font-size: 0.875rem;
+		color: #374151;
+	}
+
+	.paste-candidate {
+		width: 100%;
+		padding: 0.625rem 0.75rem;
+		border: 1px solid #d1d5db;
+		border-radius: 0.5rem;
+		background: #f9fafb;
+		color: #111827;
+		font-size: 0.875rem;
+		text-align: left;
+		cursor: pointer;
+	}
+
+	.paste-candidate:hover {
+		border-color: #2196f3;
+		background: #eff6ff;
+	}
+
+	.paste-note {
+		margin: 0;
+		font-size: 0.8125rem;
+		color: #b45309;
 	}
 
 	.form-field {
