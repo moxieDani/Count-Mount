@@ -2,7 +2,7 @@
 	import { createEventDispatcher } from 'svelte';
 	import DatePicker from './DatePicker.svelte';
 	import { extractPayments, type PaymentCandidate } from '$lib/card-alert/extract';
-	import { toLedgerFields } from '$lib/card-alert/toRow';
+	import { ledgerFieldOf, toLedgerFields } from '$lib/card-alert/toRow';
 	
 	const dispatch = createEventDispatcher();
 	
@@ -95,14 +95,12 @@
 	let pasteStatus = $state('');
 	let pasteNotes = $state<string[]>([]);
 	let isReadingPaste = $state(false);
-	let showPasteBox = $state(false);
 	let pasteCandidates = $state<PaymentCandidate[]>([]);
 
 	function resetPaste() {
 		pasteStatus = '';
 		pasteNotes = [];
 		isReadingPaste = false;
-		showPasteBox = false;
 		pasteCandidates = [];
 	}
 
@@ -136,35 +134,38 @@
 		}
 	}
 
+	// 버튼을 누르면 클립보드 내용(스크린샷 또는 문자 텍스트)을 바로 읽어 채운다
 	async function pasteFromClipboard() {
-		if (!navigator.clipboard?.read) {
-			pasteStatus = '이 브라우저에서는 바로 읽을 수 없습니다. 아래 칸을 길게 눌러 붙여넣으세요.';
-			showPasteBox = true;
+		const clipboard = navigator.clipboard;
+		if (!clipboard) {
+			pasteStatus = '이 브라우저는 클립보드 읽기를 지원하지 않습니다.';
 			return;
 		}
+		if (clipboard.read) {
+			try {
+				const items = await clipboard.read();
+				for (const item of items) {
+					const imageType = item.types.find((t) => t.startsWith('image/'));
+					if (imageType) return readPaste(await item.getType(imageType));
+				}
+				for (const item of items) {
+					if (item.types.includes('text/plain')) return readPaste(await (await item.getType('text/plain')).text());
+				}
+				pasteStatus = '클립보드가 비어 있습니다.';
+				return;
+			} catch (error) {
+				// 일부 브라우저는 read() 를 막고 텍스트 읽기만 허용하므로 readText() 로 다시 시도한다
+				console.error('Clipboard read failed:', error);
+			}
+		}
 		try {
-			const items = await navigator.clipboard.read();
-			for (const item of items) {
-				const imageType = item.types.find((t) => t.startsWith('image/'));
-				if (imageType) return readPaste(await item.getType(imageType));
-			}
-			for (const item of items) {
-				if (item.types.includes('text/plain')) return readPaste(await (await item.getType('text/plain')).text());
-			}
+			const text = await clipboard.readText();
+			if (text.trim()) return readPaste(text);
 			pasteStatus = '클립보드가 비어 있습니다.';
 		} catch (error) {
-			console.error('Clipboard read failed:', error);
-			pasteStatus = '클립보드를 읽지 못했습니다. 아래 칸을 길게 눌러 붙여넣으세요.';
-			showPasteBox = true;
+			console.error('Clipboard readText failed:', error);
+			pasteStatus = '클립보드를 읽지 못했습니다. 브라우저 설정에서 이 사이트의 클립보드 접근을 허용해 주세요.';
 		}
-	}
-
-	function handlePasteEvent(event: ClipboardEvent) {
-		event.preventDefault();
-		const data = event.clipboardData;
-		if (!data) return;
-		const image = [...data.files].find((f) => f.type.startsWith('image/'));
-		readPaste(image ?? data.getData('text/plain'));
 	}
 
 	function describeCandidate(c: PaymentCandidate) {
@@ -183,23 +184,29 @@
 		});
 		const row = [...newRowData];
 		headers.forEach((header: string, index: number) => {
-			if (isDateField(header)) {
-				if (fields.date) row[index] = fields.date;
-			} else if (isAmountField(header)) {
-				row[index] = fields.amount;
-			} else if (isPaymentMethodField(header)) {
-				if (fields.payment) row[index] = fields.payment;
-			} else if (isAccountField(header)) {
-				if (fields.account && accountOptions.includes(fields.account)) row[index] = fields.account;
-			} else if (isMerchantField(header)) {
-				row[index] = fields.merchant;
-			} else if (isNoteField(header)) {
-				if (fields.note) row[index] = fields.note;
+			switch (ledgerFieldOf(header)) {
+				case 'date':
+					if (fields.date) row[index] = fields.date;
+					break;
+				case 'amount':
+					row[index] = fields.amount;
+					break;
+				case 'payment':
+					if (fields.payment) row[index] = fields.payment;
+					break;
+				case 'account':
+					if (fields.account && accountOptions.includes(fields.account)) row[index] = fields.account;
+					break;
+				case 'merchant':
+					row[index] = fields.merchant;
+					break;
+				case 'note':
+					if (fields.note) row[index] = fields.note;
+					break;
 			}
 		});
 		newRowData = row;
 		pasteCandidates = [];
-		showPasteBox = false;
 		pasteStatus = '붙여넣은 내용으로 채웠습니다. 저장하기 전에 확인하세요.';
 		pasteNotes = [
 			...(c.sources.length > 1 ? [`같은 결제 알림 ${c.sources.length}개(${c.sources.join(', ')})를 하나로 합쳤습니다.`] : []),
@@ -249,15 +256,6 @@
 		return header === '계정';
 	}
 
-	// 지출내용(가맹점) 필드인지 확인하는 함수
-	function isMerchantField(header: string): boolean {
-		return header === '지출내용';
-	}
-
-	// 비고 필드인지 확인하는 함수
-	function isNoteField(header: string): boolean {
-		return header === '비고';
-	}
 
 	// 금액 파싱 함수
 	function parseAmount(value: string): string {
@@ -443,18 +441,6 @@
 						{/if}
 						입력 정보 붙여넣기
 					</button>
-					{#if showPasteBox}
-						<div
-							class="paste-box"
-							contenteditable="true"
-							role="textbox"
-							tabindex="0"
-							aria-label="카드 결제 문자 또는 스크린샷 붙여넣기"
-							onpaste={handlePasteEvent}
-						>
-							여기를 길게 눌러 붙여넣기
-						</div>
-					{/if}
 					{#if pasteStatus}
 						<p class="paste-status">{pasteStatus}</p>
 					{/if}
@@ -723,20 +709,6 @@
 
 	.paste-button:hover:not(:disabled) {
 		background: #1976d2;
-	}
-
-	.paste-box {
-		min-height: 3.5rem;
-		padding: 0.75rem;
-		border: 2px dashed #d1d5db;
-		border-radius: 0.5rem;
-		color: #6b7280;
-		font-size: 0.875rem;
-	}
-
-	.paste-box:focus {
-		outline: none;
-		border-color: #2196f3;
 	}
 
 	.paste-status {

@@ -2,6 +2,20 @@
 import { classifyMerchant } from './classify';
 import type { CardAlert } from './parser';
 
+export type LedgerFieldKind = 'date' | 'merchant' | 'amount' | 'payment' | 'account' | 'note';
+
+// 시트 헤더(Y26:AD26) 이름 → 채울 항목. 띄어쓰기·앞뒤 공백이 달라도 찾도록 공백을 지우고 비교한다.
+export function ledgerFieldOf(header: string): LedgerFieldKind | null {
+	const h = (header ?? '').replace(/\s/g, '');
+	if (h === '날짜' || /date/i.test(h)) return 'date';
+	if (h === '금액') return 'amount';
+	if (h === '결제방식') return 'payment';
+	if (h === '계정') return 'account';
+	if (/비고|메모/.test(h)) return 'note';
+	if (/내용|내역|사용처|가맹점|적요|항목|상호|품목/.test(h)) return 'merchant';
+	return null;
+}
+
 export interface LedgerFields {
 	date: string; // "YYYY. M. D", 알 수 없으면 ''
 	merchant: string;

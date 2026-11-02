@@ -3,7 +3,7 @@ import { parse } from './parser';
 import { PARSER_CASES } from './parser.cases';
 import { extractPayments, normalizeOcr, GAP_MARK } from './extract';
 import { classifyMerchant } from './classify';
-import { toLedgerFields } from './toRow';
+import { ledgerFieldOf, toLedgerFields } from './toRow';
 
 // 실제 결제 정보는 넣지 않는다: 가맹점·카드 끝자리·계좌는 모두 가짜 값
 const BANK_OUT = '[출금] 테스트식당 12,300원 1111-222-333***계좌 잔액 100,000원 01/03 12:00:09';
@@ -127,5 +127,22 @@ describe('toLedgerFields', () => {
 	it('시트 계정 목록에 없는 분류는 채우지 않는다', () => {
 		const p = parse('[일시불.승인(1111)]01/02 10:00\n5,000원\n스타벅스');
 		expect(toLedgerFields(p, { now, accountOptions: ['식비'] }).account).toBe('');
+	});
+});
+
+describe('ledgerFieldOf', () => {
+	it.each([
+		['날짜', 'date'],
+		['금액', 'amount'],
+		['결제방식', 'payment'],
+		['계정', 'account'],
+		['지출내용', 'merchant'],
+		['지출 내용', 'merchant'],
+		['지출내용 ', 'merchant'],
+		['사용처', 'merchant'],
+		['비고', 'note'],
+		['정산', null]
+	])('"%s" → %s', (header, kind) => {
+		expect(ledgerFieldOf(header)).toBe(kind);
 	});
 });
