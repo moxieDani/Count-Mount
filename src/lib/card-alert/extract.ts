@@ -44,6 +44,9 @@ const BOUNDARIES = [
 const RE_BANK_TITLE = /입출금\s?알림|뱅킹\s/;
 const RE_BANK_BODY = /\[\s*(?:출금|입금|이체|송금)\s*\]|[\d*]{3,}[-\d*\s]*계좌/;
 
+// 결제 실패 알림은 금액이 있어도 실제 지출이 아니므로 기록 후보에서 제외한다.
+const RE_FAILED_PAYMENT = /결제\s*(?:실패|거절)|결제되지\s*않|승인\s*(?:실패|거절)|승인되지\s*않|payment\s+failed|card\s+(?:was\s+)?declined/i;
+
 // 알림 제목 줄 끝의 "지금", "3분 전"
 const RE_NOTI_TITLE = /^(.*?)\s+(?:지금|\d+\s?분\s?전|\d+\s?시간\s?전)\s*$/gm;
 
@@ -129,7 +132,7 @@ function tossLines(lines: string[]): string[] | null {
 
 export function extractPayments(text: string): PaymentCandidate[] {
 	const messages = splitMessages(normalizeOcr(text))
-		.filter((c) => !c.bank)
+		.filter((c) => !c.bank && !RE_FAILED_PAYMENT.test(c.lines.join('\n')))
 		.map(({ lines, sms }) => {
 			const toss = tossLines(lines);
 			const chunk = toss ? toss.join('\n') : joinIfOneLine(lines);

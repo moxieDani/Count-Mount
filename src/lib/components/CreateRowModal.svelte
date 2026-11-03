@@ -141,6 +141,11 @@
 			pasteStatus = '이 브라우저는 클립보드 읽기를 지원하지 않습니다.';
 			return;
 		}
+		const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) ||
+			(navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+		pasteStatus = isIOS
+			? '클립보드를 읽는 중입니다. iOS의 붙여넣기 확인이 뜨면 허용을 눌러 주세요. 허용 후 이 작업이 이어집니다.'
+			: '';
 		if (clipboard.read) {
 			try {
 				const items = await clipboard.read();
