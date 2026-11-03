@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { parse } from './parser';
 import { PARSER_CASES } from './parser.cases';
-import { extractPayments, normalizeOcr, GAP_MARK } from './extract';
+import { extractPayments, normalizeOcr, noticeDate, GAP_MARK } from './extract';
 import { classifyMerchant } from './classify';
 import { ledgerFieldOf, toLedgerFields } from './toRow';
 import { findDuplicateRow } from '../ledger/duplicate';
@@ -169,5 +169,61 @@ describe('findDuplicateRow', () => {
 	it('비교할 칸이 비어 있거나 헤더에 없으면 검사하지 않는다', () => {
 		expect(findDuplicateRow(headers, rows, ['2026. 10. 31', '', '', '', '126000', ''])).toBe(-1);
 		expect(findDuplicateRow(['날짜', '금액'], [['10. 31', '126000']], ['2026. 10. 31', '126000'])).toBe(-1);
+	});
+});
+
+describe('알림센터 목록 (알림 제목 옆에 시각이 붙은 토스 알림들)', () => {
+	const now = new Date(2026, 10, 3, 10, 33); // 2026년 11월 3일 화요일
+	// 아이폰 알림센터 캡처의 OCR 결과 형태. 금액·가맹점은 가짜 값
+	const OCR = [
+		'10:33                              al = ©»',
+		'7,100원 결제              어제 오후 12:20',
+		'비씨체크 | 테스트이츠(일시불)',
+		'21,9009 결제                   (일) 오전 10:12',
+		'비씨체크 | 테스트마켓(일시불)                            |',
+		'ㅡ',
+		'현금영수증                         (일) 오전 9:33',
+		'3개가 나왔어요 (토스인컴 알림)',
+		'53,000원 결제 실패               (도) 오후 12:17',
+		'카드 문제로 결제되지 않았어요. 카드 상태를',
+		'확인하고 다시 시도해주세요.',
+		'35,0002 결제                     (2) 23 8:00',
+		'비씨체크 | 테스트감자국(일시불)'
+	].join('\n');
+
+	it('알림마다 나누고, 시각은 가맹점에서 떼어 내 날짜로 바꾼다 (결제 실패는 제외)', () => {
+		const got = extractPayments(OCR, { now });
+		expect(got.map((m) => [m.parsed.amount, m.parsed.merchant, m.notice?.date ?? null])).toEqual([
+			[7100, '테스트이츠', '11/02'],
+			[21900, '테스트마켓', '11/01'],
+			[35000, '테스트감자국', null] // 요일이 "(2)" 로 깨져 날짜를 알 수 없음
+		]);
+		expect(got.every((m) => m.sources[0] === '토스')).toBe(true);
+	});
+
+	it('입력값에는 알림 시각으로 계산한 날짜가 들어가고 확인 안내가 붙는다', () => {
+		const [first] = extractPayments(OCR, { now });
+		const f = toLedgerFields(first.parsed, { now, notice: first.notice });
+		expect(f.date).toBe('2026. 11. 2');
+		expect(f.warnings.some((w) => w.includes('어제 오후 12:20'))).toBe(true);
+	});
+
+	it.each([
+		['지금', '11/03'],
+		['3분 전', '11/03'],
+		['어제 오후 12:20', '11/02'],
+		['그저께 오전 9:00', '11/01'],
+		['(일) 오전 10:12', '11/01'],
+		['(금) 오후 8:00', '10/30'],
+		['(화) 오후 1:00', '10/27'],
+		['오후 12:20', '11/03'],
+		['10월 30일', '10/30'],
+		['(2) 23 8:00', null]
+	])('알림 시각 "%s" → %s', (label, date) => {
+		expect(noticeDate(label, now)).toBe(date);
+	});
+
+	it('자정 넘어 "2시간 전"은 전날', () => {
+		expect(noticeDate('2시간 전', new Date(2026, 10, 3, 1, 0))).toBe('11/02');
 	});
 });

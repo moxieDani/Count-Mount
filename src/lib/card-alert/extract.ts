@@ -9,6 +9,12 @@ export interface PaymentCandidate {
 	text: string;
 	parsed: CardAlert;
 	sources: AlertSource[];
+	// 알림 제목 옆에 표시된 시각("어제 오후 12:20")과 그걸로 계산한 날짜("11/02"). 토스 알림처럼 본문에 일시가 없을 때 쓴다.
+	notice?: { label: string; date: string | null };
+}
+
+export interface ExtractOptions {
+	now?: Date; // 알림 시각("어제", "(일)")을 날짜로 바꿀 기준 시각
 }
 
 // OCR 단계에서 줄 사이가 크게 벌어진 곳(다른 말풍선·알림)에 넣는 구분 표시
@@ -47,8 +53,30 @@ const RE_BANK_BODY = /\[\s*(?:출금|입금|이체|송금)\s*\]|[\d*]{3,}[-\d*\s
 // 결제 실패 알림은 금액이 있어도 실제 지출이 아니므로 기록 후보에서 제외한다.
 const RE_FAILED_PAYMENT = /결제\s*(?:실패|거절)|결제되지\s*않|승인\s*(?:실패|거절)|승인되지\s*않|payment\s+failed|card\s+(?:was\s+)?declined/i;
 
-// 알림 제목 줄 끝의 "지금", "3분 전"
-const RE_NOTI_TITLE = /^(.*?)\s+(?:지금|\d+\s?분\s?전|\d+\s?시간\s?전)\s*$/gm;
+// 알림 제목 줄 끝의 알림 시각은 새 알림의 시작이다: "지금", "3분 전" / 칸을 띄우고 "어제 오후 12:20", "(일) 오전 10:12"
+const RE_NOTI_TITLE = /^(.*?)\s+(지금|\d+\s?분\s?전|\d+\s?시간\s?전)\s*$/gm;
+const RE_NOTI_TITLE_TIME =
+	/^(.*?\S)\s{2,}((?:\([^)\s]{1,2}\)\s*|어제\s*|오늘\s*|그저께\s*|\d{1,2}월\s?\d{1,2}일\s*)?(?:\S{1,3}\s+)?\d{1,2}:\d{2})\s*$/gm;
+// 떼어 낸 알림 시각을 다음 줄에 남겨 두는 표시
+const NOTICE_MARK = '\u2063';
+const WEEKDAYS = '일월화수목금토';
+
+const pad = (n: number) => String(n).padStart(2, '0');
+
+// 알림 시각 → "MM/DD". 요일이 OCR로 깨졌거나("(2)") 알 수 없으면 null
+export function noticeDate(label: string, now: Date): string | null {
+	const md = /(\d{1,2})월\s?(\d{1,2})일/.exec(label);
+	if (md) return `${pad(+md[1])}/${pad(+md[2])}`;
+	const d = new Date(now);
+	const ago = /(\d+)\s?(분|시간)\s?전/.exec(label);
+	const weekday = /\(([일월화수목금토])\)/.exec(label);
+	if (ago) d.setMinutes(d.getMinutes() - +ago[1] * (ago[2] === '시간' ? 60 : 1));
+	else if (/그저께/.test(label)) d.setDate(d.getDate() - 2);
+	else if (/어제/.test(label)) d.setDate(d.getDate() - 1);
+	else if (weekday) d.setDate(d.getDate() - ((now.getDay() - WEEKDAYS.indexOf(weekday[1]) + 7) % 7 || 7));
+	else if (!/^(?:지금|오늘.*|(?:오전|오후)\s?\d{1,2}:\d{2})$/.test(label.trim())) return null;
+	return `${pad(d.getMonth() + 1)}/${pad(d.getDate())}`;
+}
 
 const RE_AMOUNT_LINE = /\d\s?원/;
 const RE_DATETIME_LINE = /\d{1,2}\/\d{1,2}\s+\d{1,2}:\d{2}/;
@@ -61,8 +89,9 @@ export function normalizeOcr(text: string): string {
 	return (
 		text
 			.replace(/\r/g, '')
-			// 알림 제목 끝의 시각은 새 알림의 시작: 구분 표시로 바꾸고 떼어낸다
-			.replace(RE_NOTI_TITLE, `${GAP_MARK}\n$1`)
+			// 알림 제목 끝의 시각은 새 알림의 시작: 구분 표시를 넣고, 시각은 떼어 다음 줄에 표시와 함께 남긴다
+			.replace(RE_NOTI_TITLE, `${GAP_MARK}\n$1\n${NOTICE_MARK}$2`)
+			.replace(RE_NOTI_TITLE_TIME, `${GAP_MARK}\n$1\n${NOTICE_MARK}$2`)
 			.replace(/ /g, ' ')
 			// "KB국민카드" 의 KB 가 "<8", "1<8" 로 읽힘
 			.replace(/[^\s가-힣]{1,3}(?=국민카드)/g, 'KB')
@@ -77,6 +106,7 @@ interface Chunk {
 	lines: string[];
 	bank: boolean;
 	sms: boolean;
+	notice: string | null;
 }
 
 function splitMessages(text: string): Chunk[] {
@@ -84,14 +114,20 @@ function splitMessages(text: string): Chunk[] {
 	let cur: string[] = [];
 	let bank = false;
 	let sms = false;
+	let notice: string | null = null;
 	const flush = () => {
-		if (cur.length) chunks.push({ lines: cur, bank, sms });
+		if (cur.length) chunks.push({ lines: cur, bank, sms, notice });
 		cur = [];
 		bank = false;
 		sms = false;
+		notice = null;
 	};
 	for (const line of text.split('\n')) {
 		if (!line.trim()) continue;
+		if (line.startsWith(NOTICE_MARK)) {
+			notice = line.slice(NOTICE_MARK.length).trim();
+			continue;
+		}
 		if (BOUNDARIES.some((re) => re.test(line))) {
 			flush();
 			continue;
@@ -130,28 +166,34 @@ function tossLines(lines: string[]): string[] | null {
 	return lines.flatMap((l) => l.replace(RE_TOSS_TITLE, '$1').split(RE_TOSS_SEP));
 }
 
-export function extractPayments(text: string): PaymentCandidate[] {
+export function extractPayments(text: string, { now = new Date() }: ExtractOptions = {}): PaymentCandidate[] {
 	const messages = splitMessages(normalizeOcr(text))
 		.filter((c) => !c.bank && !RE_FAILED_PAYMENT.test(c.lines.join('\n')))
-		.map(({ lines, sms }) => {
+		.map(({ lines, sms, notice }): PaymentCandidate => {
 			const toss = tossLines(lines);
 			const chunk = toss ? toss.join('\n') : joinIfOneLine(lines);
 			const parsed = parse(chunk);
-			if (parsed.merchant) parsed.merchant = parsed.merchant.replace(/\s+/g, ' ');
+			// 공백을 하나로 줄이고, 알림 카드 가장자리에서 읽힌 끝의 기호 잡음("쿠팡 |")을 지운다
+			if (parsed.merchant) parsed.merchant = parsed.merchant.replace(/(?:\s+[^\p{L}\p{N}()]+)+$/u, '').replace(/\s+/g, ' ');
 			const source: AlertSource = toss ? '토스' : sms ? '카드 문자' : '카드사 알림';
-			return { text: chunk, parsed, sources: [source] };
+			return {
+				text: chunk,
+				parsed,
+				sources: [source],
+				...(notice ? { notice: { label: notice, date: noticeDate(notice, now) } } : {})
+			};
 		})
 		.filter((m) => !RE_BANK_BODY.test(m.text))
 		.filter((m) => m.parsed.amount != null || m.parsed.foreign != null);
 	return mergeDuplicates(messages);
 }
 
-// 후보가 확실한지: 금액·일시가 있고, 가맹점이 한글 2글자 이상이거나 영문 3글자 이상 연속이어야 한다.
+// 후보가 확실한지: 금액·일시(또는 알림 시각으로 계산한 날짜)가 있고, 가맹점이 한글 2글자 이상이거나 영문 3글자 이상 연속이어야 한다.
 // 확실한 후보가 하나도 없으면 다른 전처리로 다시 읽는다.
 export function isConfident(m: PaymentCandidate): boolean {
 	const p = m.parsed;
 	if (p.amount == null && p.foreign == null) return false;
-	if (!p.datetime) return false;
+	if (!p.datetime && !m.notice?.date) return false;
 	const name = p.merchant ?? '';
 	return (name.match(/[가-힣]/g) ?? []).length >= 2 || /[A-Za-z]{3,}/.test(name);
 }

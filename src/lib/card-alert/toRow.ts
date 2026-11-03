@@ -28,6 +28,7 @@ export interface LedgerFields {
 
 interface Options {
 	now?: Date;
+	notice?: { label: string; date: string | null }; // 본문에 일시가 없을 때 쓸 알림 시각과 계산한 날짜("MM/DD")
 	viewYear?: number;
 	viewMonth?: number;
 	paymentOptions?: string[];
@@ -59,14 +60,16 @@ export function toLedgerFields(p: CardAlert, opts: Options = {}): LedgerFields {
 	const warnings: string[] = [];
 
 	let date = '';
-	if (p.datetime) {
-		const [month, day] = p.datetime.split(' ')[0].split('/').map(Number);
+	const md = p.datetime?.split(' ')[0] ?? opts.notice?.date ?? null;
+	if (md) {
+		const [month, day] = md.split('/').map(Number);
 		// 1월에 받은 12월 문자처럼, 문자 속 월이 지금보다 뒤면 작년 거래
 		const year = month > now.getMonth() + 1 ? now.getFullYear() - 1 : now.getFullYear();
 		date = `${year}. ${month}. ${day}`;
 		if (opts.viewMonth && (month !== opts.viewMonth || (opts.viewYear && year !== opts.viewYear))) {
 			warnings.push(`${month}월 결제입니다. 지금 보고 있는 ${opts.viewMonth}월 시트에 추가됩니다.`);
 		}
+		if (!p.datetime) warnings.push(`알림 시각(${opts.notice!.label})으로 계산한 날짜입니다. 맞는지 확인하세요.`);
 	} else {
 		warnings.push('결제 일시가 없어 날짜는 그대로 둡니다.');
 	}

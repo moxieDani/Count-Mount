@@ -44,10 +44,12 @@ function merge(group: PaymentCandidate[]): PaymentCandidate {
 	for (const m of rest)
 		for (const [k, v] of Object.entries(m.parsed)) if (filled[k] == null && v != null) filled[k] = v;
 	parsed.is_check = group.some((m) => m.parsed.is_check);
+	const notice = group.find((m) => m.notice?.date)?.notice ?? group.find((m) => m.notice)?.notice;
 	return {
 		text: group.map((m) => m.text).join('\n---\n'),
 		parsed,
-		sources: [...new Set(group.flatMap((m) => m.sources))]
+		sources: [...new Set(group.flatMap((m) => m.sources))],
+		...(notice ? { notice } : {})
 	};
 }
 

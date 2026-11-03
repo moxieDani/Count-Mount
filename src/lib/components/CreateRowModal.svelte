@@ -177,11 +177,12 @@
 		const p = c.parsed;
 		const amount = p.amount != null ? `${p.amount.toLocaleString('ko-KR')}원` : p.foreign;
 		const card = [p.card, p.card_suffix, p.is_check ? '체크' : ''].filter(Boolean).join(' ');
-		return [amount, p.merchant, p.datetime, card].filter(Boolean).join(' · ');
+		return [amount, p.merchant, p.datetime ?? c.notice?.label, card].filter(Boolean).join(' · ');
 	}
 
 	function applyCandidate(c: PaymentCandidate) {
 		const fields = toLedgerFields(c.parsed, {
+			notice: c.notice,
 			viewYear: currentYear,
 			viewMonth: currentMonth,
 			paymentOptions: paymentMethodOptions,
