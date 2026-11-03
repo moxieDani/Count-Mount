@@ -161,10 +161,6 @@
 			} catch (error) {
 				// 일부 브라우저는 read() 를 막고 텍스트 읽기만 허용하므로 readText() 로 다시 시도한다
 				console.error('Clipboard read failed:', error);
-				if (error instanceof DOMException && error.name === 'NotAllowedError') {
-					pasteStatus = '클립보드 접근이 차단되었습니다. 브라우저에서 이 사이트의 클립보드 읽기를 허용한 뒤 다시 눌러 주세요.';
-					return;
-				}
 			}
 		}
 		try {
