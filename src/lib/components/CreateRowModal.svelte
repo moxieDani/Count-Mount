@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { createEventDispatcher, onMount } from 'svelte';
+	import { createEventDispatcher } from 'svelte';
 	import DatePicker from './DatePicker.svelte';
 	import { extractPayments, type PaymentCandidate } from '$lib/card-alert/extract';
 	import { ledgerFieldOf, toLedgerFields } from '$lib/card-alert/toRow';
@@ -96,13 +96,6 @@
 	let pasteNotes = $state<string[]>([]);
 	let isReadingPaste = $state(false);
 	let pasteCandidates = $state<PaymentCandidate[]>([]);
-	let isIOSDevice = $state(false);
-	let imageInput: HTMLInputElement;
-
-	onMount(() => {
-		isIOSDevice = /iPhone|iPad|iPod/.test(navigator.userAgent) ||
-			(navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-	});
 
 	function resetPaste() {
 		pasteStatus = '';
@@ -143,18 +136,16 @@
 
 	// 버튼을 누르면 클립보드 내용(스크린샷 또는 문자 텍스트)을 바로 읽어 채운다
 	async function pasteFromClipboard() {
-		if (isIOSDevice) {
-			pasteStatus = '아이폰 브라우저에서는 사진 보관함에서 스크린샷을 선택해 주세요.';
-			imageInput?.click();
-			return;
-		}
-
 		const clipboard = navigator.clipboard;
 		if (!clipboard) {
 			pasteStatus = '이 브라우저는 클립보드 읽기를 지원하지 않습니다.';
 			return;
 		}
-		pasteStatus = '';
+		const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) ||
+			(navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+		pasteStatus = isIOS
+			? '클립보드를 읽는 중입니다…'
+			: '';
 		if (clipboard.read) {
 			try {
 				const items = await clipboard.read();
@@ -184,13 +175,6 @@
 			console.error('Clipboard readText failed:', error);
 			pasteStatus = '클립보드를 읽지 못했습니다. 브라우저 설정에서 이 사이트의 클립보드 접근을 허용해 주세요.';
 		}
-	}
-
-	async function handleImageSelected(event: Event) {
-		const input = event.currentTarget as HTMLInputElement;
-		const image = input.files?.[0];
-		input.value = '';
-		if (image) await readPaste(image);
 	}
 
 	function describeCandidate(c: PaymentCandidate) {
@@ -464,17 +448,8 @@
 						{#if isReadingPaste}
 							<div class="spinner"></div>
 						{/if}
-						{isIOSDevice ? '사진에서 결제 내역 선택' : '입력 정보 붙여넣기'}
+						입력 정보 붙여넣기
 					</button>
-					<input
-						type="file"
-						accept="image/*"
-						hidden
-						tabindex="-1"
-						bind:this={imageInput}
-						onchange={handleImageSelected}
-						aria-label="결제 알림 스크린샷 선택"
-					/>
 					{#if pasteStatus}
 						<p class="paste-status">{pasteStatus}</p>
 					{/if}
