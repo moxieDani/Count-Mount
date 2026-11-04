@@ -166,6 +166,11 @@ describe('findDuplicateRow', () => {
 		expect(findDuplicateRow(headers, rows, ['2026. 10. 31', '다른가게', '', '', '126000', ''])).toBe(-1);
 	});
 
+	it('직접 입력한 금액은 숫자로 오고, 빈 칸은 null 로 온다', () => {
+		expect(findDuplicateRow(headers, rows, ['2026. 10. 31', '테스트 와인', '', null, 126000, null])).toBe(1);
+		expect(findDuplicateRow(headers, rows, ['2026. 11. 4', '테스트식당', '', '외식', 9900, '메모'])).toBe(-1);
+	});
+
 	it('비교할 칸이 비어 있거나 헤더에 없으면 검사하지 않는다', () => {
 		expect(findDuplicateRow(headers, rows, ['2026. 10. 31', '', '', '', '126000', ''])).toBe(-1);
 		expect(findDuplicateRow(['날짜', '금액'], [['10. 31', '126000']], ['2026. 10. 31', '126000'])).toBe(-1);

@@ -19,18 +19,22 @@ function textKey(value: string): string | null {
 	return value.replace(/\s/g, '').toLowerCase() || null;
 }
 
+// 칸 값은 문자열만 오지 않는다: 직접 입력한 금액은 숫자(type="number"), 빈 칸은 null
+type Cell = string | number | null | undefined;
+const cell = (r: Cell[], i: number) => (r[i] == null ? '' : String(r[i]));
+
 // 같은 내역이 있으면 rows 안의 위치를, 없거나 비교할 칸(날짜·금액·지출내용)이 없으면 -1
-export function findDuplicateRow(headers: string[], rows: string[][], row: string[]): number {
+export function findDuplicateRow(headers: string[], rows: Cell[][], row: Cell[]): number {
 	const col = (kind: string) => headers.findIndex((h) => ledgerFieldOf(h) === kind);
 	const date = col('date');
 	const amount = col('amount');
 	const merchant = col('merchant');
 	if (date < 0 || amount < 0 || merchant < 0) return -1;
 
-	const key = (r: string[]) => {
-		const d = dayKey(r[date] ?? '');
-		const a = amountKey(r[amount] ?? '');
-		const m = textKey(r[merchant] ?? '');
+	const key = (r: Cell[]) => {
+		const d = dayKey(cell(r, date));
+		const a = amountKey(cell(r, amount));
+		const m = textKey(cell(r, merchant));
 		return d && a !== null && m ? `${d}|${a}|${m}` : null;
 	};
 	const target = key(row);
