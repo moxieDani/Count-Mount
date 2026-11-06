@@ -20,6 +20,10 @@ describe('월별 지출 분석', () => {
   expect(result.accounts[0]).toMatchObject({ name: '식비', total: 30000, difference: 10000 });
   expect(result.accounts[0].transactions.map(item => item.description)).toEqual(['점심']);
  });
+ it('비고가 있는 내역은 내용을 보존하고 없는 내역은 비워 둔다', () => {
+  const result = summarizeMonth(['계정', '금액', '비고'], [['식비', '100', '친구와 점심'], ['식비', '50']], [], []);
+  expect(result.accounts[0].transactions.map(item => item.note)).toEqual(['친구와 점심', '']);
+ });
  it('예산이 없는 계정은 미설정으로 표시한다', () => {
   expect(summarizeMonth(['계정','금액'], [['기타','100']], [], []).accounts[0].budget).toBeNull();
  });

@@ -1,6 +1,6 @@
 import { ledgerFieldOf } from '../card-alert/toRow';
 
-export type Transaction = { date: string; description: string; amount: number; payment: string };
+export type Transaction = { date: string; description: string; amount: number; payment: string; note: string };
 export type AccountSummary = { name: string; total: number; budget: number | null; difference: number | null; transactions: Transaction[] };
 export function numberValue(value: unknown): number | null {
  const text = String(value ?? '').trim();
@@ -23,7 +23,7 @@ export function summarizeMonth(headers: string[], rows: string[][], budgetRows: 
   if (amount === null || amount <= 0) continue;
   const name = row[accountIndex]?.trim() || '미분류';
   const items = groups.get(name) ?? [];
-  items.push({ date: row[index('date')] || '', description: row[index('merchant')] || '내용 없음', payment: row[index('payment')] || '', amount });
+  items.push({ date: row[index('date')] || '', description: row[index('merchant')] || '내용 없음', payment: row[index('payment')] || '', note: row[index('note')]?.trim() || '', amount });
   groups.set(name, items);
  }
  const accounts: AccountSummary[] = [...groups].map(([name, transactions]) => {
