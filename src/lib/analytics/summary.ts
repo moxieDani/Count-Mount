@@ -20,7 +20,7 @@ export function summarizeMonth(headers: string[], rows: string[][], budgetRows: 
  const groups = new Map<string, Transaction[]>();
  for (const row of rows) {
   const amount = numberValue(row[amountIndex]);
-  if (amount === null || amount === 0) continue;
+  if (amount === null || amount <= 0) continue;
   const name = row[accountIndex]?.trim() || '미분류';
   const items = groups.get(name) ?? [];
   items.push({ date: row[index('date')] || '', description: row[index('merchant')] || '내용 없음', payment: row[index('payment')] || '', amount });

@@ -295,7 +295,7 @@
 				if (cellValue && typeof cellValue === 'string') {
 					// 숫자가 아닌 문자 제거하고 숫자만 추출
 					const numericValue = parseFloat(cellValue.replace(/[^\d.-]/g, ''));
-					if (!isNaN(numericValue)) {
+					if (!isNaN(numericValue) && numericValue > 0) {
 						total += numericValue;
 					}
 				}

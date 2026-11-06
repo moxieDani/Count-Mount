@@ -229,6 +229,7 @@
 	}
 
 	.content {
+		min-width: 0;
 		flex-grow: 1;
 		display: flex;
 		flex-direction: column;
