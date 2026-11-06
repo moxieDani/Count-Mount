@@ -6,9 +6,11 @@
 	import LoginButton from '$lib/components/LoginButton.svelte'
 	import HeaderAuth from '$lib/components/HeaderAuth.svelte'
 	import SpreadsheetTable from '$lib/components/SpreadsheetTable.svelte'
+	import Analytics from '$lib/components/Analytics.svelte'
 
 	let session = $derived(page.data.session);
 	let currentSpreadsheetId = $state<string>('');
+	let view = $state<'records' | 'analytics'>('records');
 	let isLoading = $state(false);
 	let error = $state('');
 	let isAuthError = $state(false);
@@ -158,11 +160,12 @@
 					{/if}
 				</div>
 			{:else if currentSpreadsheetId}
-				<SpreadsheetTable 
+				<nav class="view-nav" aria-label="화면 선택"><button class:active={view === 'records'} onclick={() => view = 'records'}>지출 기록</button><button class:active={view === 'analytics'} onclick={() => view = 'analytics'}>지출 분석</button></nav>
+				{#if view === 'analytics'}<Analytics spreadsheetId={currentSpreadsheetId} />{:else}<SpreadsheetTable
 					spreadsheetId={currentSpreadsheetId}
 					range="Y27:AD126"
 					headerRange="Y26:AD26"
-				/>
+				/>{/if}
 			{/if}
 		</div>
 	</main>
@@ -171,6 +174,9 @@
 {/if}
 
 <style>
+ .view-nav { display:flex; gap:8px; padding:12px 24px; background:white; border-bottom:1px solid #e8edf5; }
+ .view-nav button { border:0; background:transparent; color:#78859a; padding:10px 16px; border-radius:10px; font-weight:700; cursor:pointer; }
+ .view-nav button.active { background:#eef3ff; color:#315fda; }
 	.app-main {
 		min-height: 100vh;
 		background: #f5f5f5;
