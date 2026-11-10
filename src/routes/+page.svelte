@@ -7,10 +7,11 @@
 	import HeaderAuth from '$lib/components/HeaderAuth.svelte'
 	import SpreadsheetTable from '$lib/components/SpreadsheetTable.svelte'
 	import Analytics from '$lib/components/Analytics.svelte'
+	import CardUsage from '$lib/components/CardUsage.svelte'
 
 	let session = $derived(page.data.session);
 	let currentSpreadsheetId = $state<string>('');
-	let view = $state<'records' | 'analytics'>('records');
+	let view = $state<'records' | 'analytics' | 'cards'>('records');
 	let isLoading = $state(false);
 	let error = $state('');
 	let isAuthError = $state(false);
@@ -160,8 +161,8 @@
 					{/if}
 				</div>
 			{:else if currentSpreadsheetId}
-				<nav class="view-nav" aria-label="화면 선택"><button class:active={view === 'records'} onclick={() => view = 'records'}>지출 기록</button><button class:active={view === 'analytics'} onclick={() => view = 'analytics'}>지출 분석</button></nav>
-				{#if view === 'analytics'}<Analytics spreadsheetId={currentSpreadsheetId} />{:else}<SpreadsheetTable
+				<nav class="view-nav" aria-label="화면 선택"><button class:active={view === 'records'} onclick={() => view = 'records'}>지출 기록</button><button class:active={view === 'analytics'} onclick={() => view = 'analytics'}>지출 분석</button><button class:active={view === 'cards'} onclick={() => view = 'cards'}>카드 실적</button></nav>
+				{#if view === 'analytics'}<Analytics spreadsheetId={currentSpreadsheetId} />{:else if view === 'cards'}<CardUsage />{:else}<SpreadsheetTable
 					spreadsheetId={currentSpreadsheetId}
 					range="Y27:AD126"
 					headerRange="Y26:AD26"
