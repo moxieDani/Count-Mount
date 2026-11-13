@@ -4,6 +4,7 @@
 	import MonthYearPicker from './MonthYearPicker.svelte';
 	import EditRowModal from './EditRowModal.svelte';
 	import CreateRowModal from './CreateRowModal.svelte';
+	import SettlementBadge from './SettlementBadge.svelte';
 
 	// Google Picker API 타입 정의
 	const googlePicker: any = typeof window !== 'undefined' ? (window as any).google : null;
@@ -477,6 +478,18 @@
 		}
 	}
 
+	// 당겨서 새로고침할 때는 "불러오는 중" 화면으로 바꾸지 않고 보던 표를 둔 채 데이터만 바꾼다.
+	// (isLoading 은 그대로 켜서 그동안 달 이동 버튼을 막는다)
+	let quietRefresh = $state(false);
+	export async function refresh() {
+		quietRefresh = true;
+		try {
+			await fetchTableData();
+		} finally {
+			quietRefresh = false;
+		}
+	}
+
 	async function fetchTableData() {
 		if (!session?.accessToken) return;
 
@@ -734,28 +747,17 @@
 		<div class="header-info">
 			<h3>
 				📊 {currentYear}년 {monthNames[currentMonth - 1]}
-				<button 
-					onclick={() => fetchTableData()} 
-					class="nav-btn refresh-btn"
-					disabled={isLoading}
-					title="새로고침"
-				>
-					🔄
-				</button>
 			</h3>
 			<div class="expense-info">
 				<span class="expense-badge">총 지출: {formatNumber(calculateTotalExpense())}원</span>
 			</div>
 			{#if settlementData?.settlement}
+			<!-- 폰에서 두 번 탭하면 토스 송금 확인 창이 뜬다 -->
 			<div class="expense-info">
-				<span class="settlement-badge seo-eun">
-					{settlementData.settlement.seoEun.label}: {settlementData.settlement.seoEun.formattedAmount}원
-				</span>
+				<SettlementBadge person="seoEun" {...settlementData.settlement.seoEun} />
 			</div>
 			<div class="expense-info">
-				<span class="settlement-badge ki-soon">
-					{settlementData.settlement.kiSoon.label}: {settlementData.settlement.kiSoon.formattedAmount}원
-				</span>
+				<SettlementBadge person="kiSoon" {...settlementData.settlement.kiSoon} />
 			</div>
 		{/if}
 		</div>
@@ -771,7 +773,7 @@
 	{/if}
 
 	<div class="table-content">
-		{#if isLoading}
+		{#if isLoading && !quietRefresh}
 			<div class="loading-state">
 				<div class="spinner"></div>
 				<p>데이터를 불러오는 중...</p>
@@ -981,31 +983,6 @@
 		margin-bottom: 0.5rem;
 	}
 	
-	.settlement-badge {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		padding: 0.25rem 0.8rem;
-		border-radius: 4px;
-		font-size: 0.8rem;
-		font-weight: 600;
-		text-align: center;
-		line-height: 1.2;
-	}
-	
-	.settlement-badge.seo-eun {
-		background: rgba(255, 152, 0, 0.1);
-		border: 1px solid rgba(255, 152, 0, 0.3);
-		color: #e65100;
-		margin-bottom: 0.5rem;
-	}
-	
-	.settlement-badge.ki-soon {
-		background: rgba(33, 150, 243, 0.1);
-		border: 1px solid rgba(33, 150, 243, 0.3);
-		color: #1976d2;
-	}
-
 	/* 셀 클릭 가능 스타일 */
 	.clickable-cell {
 		cursor: pointer;
@@ -1221,26 +1198,6 @@
 		background: #f5f5f5;
 		color: #999;
 		border-color: #ddd;
-	}
-
-	.refresh-btn {
-		background: transparent;
-		border-color: transparent;
-		font-size: 1rem !important;
-		width: 20px;
-		height: 20px;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		transform: scale(1.2);
-		box-shadow: 0 2px 4px rgba(76, 114, 175, 0.3);
-	}
-
-	.refresh-btn:hover:not(:disabled) {
-		background: transparent;
-		border-color: transparent;
-		transform: scale(1.2);
-		box-shadow: 0 2px 4px rgba(76, 114, 175, 0.3);
 	}
 
 	.create-btn {
@@ -1739,8 +1696,7 @@
 			gap: 0.25rem;
 		}
 
-		.expense-badge,
-		.settlement-badge {
+		.expense-badge {
 			font-size: 0.75rem;
 			padding: 0.2rem 0.6rem;
 		}

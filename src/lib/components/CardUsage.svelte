@@ -15,11 +15,12 @@
 
 	const valueText = (i: CardItem) => (i.value === null ? i.text : `${i.value.toLocaleString('ko-KR')}${i.unit}`);
 
-	// 새로고침을 연달아 누르면 늦게 온 이전 응답이 새 결과를 덮지 않도록 마지막 요청만 반영한다
+	// 새로고침을 연달아 하면 늦게 온 이전 응답이 새 결과를 덮지 않도록 마지막 요청만 반영한다.
+	// quiet: 당겨서 새로고침할 때는 보던 화면을 그대로 두고 데이터만 바꾼다
 	let latest = 0;
-	async function load() {
+	async function load(quiet = false) {
 		const id = ++latest;
-		loading = true;
+		if (!quiet) loading = true;
 		error = '';
 		try {
 			const res = await fetch(`/api/card-usage?year=${year}`, {
@@ -35,7 +36,10 @@
 			if (id === latest) loading = false;
 		}
 	}
-	onMount(load);
+	onMount(() => load());
+	export function refresh() {
+		return load(true);
+	}
 </script>
 
 <div class="dashboard">
@@ -45,13 +49,12 @@
 			<h2>카드 실적</h2>
 			<p>{result?.docName ?? `${year} 카드사용내역`}</p>
 		</div>
-		<button class="refresh" onclick={load}>↻ 새로고침</button>
 	</div>
 
 	{#if loading}
 		<div class="state">카드 실적을 불러오고 있어요...</div>
 	{:else if error}
-		<div class="state">{error} <button onclick={load}>다시 시도</button></div>
+		<div class="state">{error} <button onclick={() => load()}>다시 시도</button></div>
 	{:else if result && !result.found}
 		<div class="state panel missing">
 			<strong>문서 없음</strong>
@@ -108,7 +111,7 @@
 		width: 100%;
 		min-width: 0;
 		max-width: 1200px;
-		margin: auto;
+		margin: 0 auto;
 		padding: 36px 28px 70px;
 		color: #18243a;
 		font-family: system-ui, sans-serif;
@@ -142,16 +145,6 @@
 		font-weight: 800;
 		color: #5b7fd5;
 		margin: 0 0 8px;
-	}
-	.refresh {
-		flex-shrink: 0;
-		border: 0;
-		background: #eef3ff;
-		color: #315fda;
-		padding: 10px 14px;
-		border-radius: 10px;
-		font-weight: 700;
-		cursor: pointer;
 	}
 	.panel {
 		box-sizing: border-box;

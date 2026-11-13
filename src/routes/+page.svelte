@@ -8,6 +8,7 @@
 	import SpreadsheetTable from '$lib/components/SpreadsheetTable.svelte'
 	import Analytics from '$lib/components/Analytics.svelte'
 	import CardUsage from '$lib/components/CardUsage.svelte'
+	import PullToRefresh from '$lib/components/PullToRefresh.svelte'
 
 	let session = $derived(page.data.session);
 	let currentSpreadsheetId = $state<string>('');
@@ -124,6 +125,17 @@
 		await loadCurrentYearSpreadsheet();
 	}
 
+	// 당겨서 새로고침: 지금 보고 있는 탭만 다시 불러온다. 가계부를 아직 못 찾았으면 처음부터 다시 찾는다.
+	type Refreshable = { refresh: () => Promise<unknown> };
+	let recordsView = $state<Refreshable>();
+	let analyticsView = $state<Refreshable>();
+	let cardsView = $state<Refreshable>();
+	function refreshView() {
+		if (!currentSpreadsheetId) return retry();
+		const current = view === 'analytics' ? analyticsView : view === 'cards' ? cardsView : recordsView;
+		return current?.refresh();
+	}
+
 	// 세션이 변경될 때마다 자동으로 스프레드시트 로드
 	$effect(async () => {
 		if (session?.accessToken && !currentSpreadsheetId) {
@@ -140,7 +152,8 @@
 				<HeaderAuth />
 			</div>
 		</div>
-		<div class="content">
+		<!-- 상단 바는 고정, 그 아래만 스크롤된다. 맨 위에서 길게 당기면 새로고침 -->
+		<PullToRefresh onrefresh={refreshView}>
 			{#if isLoading}
 				<div class="loading-section">
 					<div class="loading-spinner"></div>
@@ -162,13 +175,14 @@
 				</div>
 			{:else if currentSpreadsheetId}
 				<nav class="view-nav" aria-label="화면 선택"><button class:active={view === 'records'} onclick={() => view = 'records'}>지출 기록</button><button class:active={view === 'analytics'} onclick={() => view = 'analytics'}>지출 분석</button><button class:active={view === 'cards'} onclick={() => view = 'cards'}>카드 실적</button></nav>
-				{#if view === 'analytics'}<Analytics spreadsheetId={currentSpreadsheetId} />{:else if view === 'cards'}<CardUsage />{:else}<SpreadsheetTable
+				{#if view === 'analytics'}<Analytics bind:this={analyticsView} spreadsheetId={currentSpreadsheetId} />{:else if view === 'cards'}<CardUsage bind:this={cardsView} />{:else}<SpreadsheetTable
+					bind:this={recordsView}
 					spreadsheetId={currentSpreadsheetId}
 					range="Y27:AD126"
 					headerRange="Y26:AD26"
 				/>{/if}
 			{/if}
-		</div>
+		</PullToRefresh>
 	</main>
 {:else}
 	<LoginButton />
@@ -178,14 +192,23 @@
  .view-nav { display:flex; gap:8px; padding:12px 24px; background:white; border-bottom:1px solid #e8edf5; }
  .view-nav button { border:0; background:transparent; color:#78859a; padding:10px 16px; border-radius:10px; font-weight:700; cursor:pointer; }
  .view-nav button.active { background:#eef3ff; color:#315fda; }
+	/* 화면 전체를 차지하는 틀. 문서 자체는 스크롤되지 않으니 상단 바가 밀리거나 튕기지 않는다 */
 	.app-main {
-		min-height: 100vh;
+		position: fixed;
+		inset: 0;
 		background: #f5f5f5;
 		display: flex;
 		flex-direction: column;
 	}
 
+	/* 휴대폰에서 화면 전체가 고무줄처럼 끌려 내려오는 것도 막는다 */
+	:global(html),
+	:global(body) {
+		overscroll-behavior-y: none;
+	}
+
 	.header {
+		flex: none;
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
@@ -193,8 +216,7 @@
 		background: #e0e0e0;
 		border-bottom: 1px solid #e0e0e0;
 		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-		position: sticky;
-		top: 0;
+		position: relative;
 		z-index: 100;
 	}
 
@@ -227,14 +249,6 @@
 		background: #1976d2;
 		transform: translateY(-1px);
 		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-	}
-
-	.content {
-		min-width: 0;
-		flex-grow: 1;
-		display: flex;
-		flex-direction: column;
-		padding: 0;
 	}
 
 	.loading-section {
@@ -327,10 +341,6 @@
 		.header-actions button {
 			padding: 0.6rem 1rem;
 			font-size: 0.9rem;
-		}
-
-		.content {
-			padding: 0;
 		}
 
 		.loading-section, .error-section {
