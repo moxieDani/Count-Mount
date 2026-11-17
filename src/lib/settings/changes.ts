@@ -176,12 +176,13 @@ export function setTransferMemo(s: YearSettings, sectionName: string, memo: stri
 	return [{ range: transfer(`B${row}`), before: [[sec.memo]], after: [[memo]], label: `자동이체 내역 · ${sec.name} · 메모` }];
 }
 
-const shown = (rows: Cell[][]) => {
+/** 칸 값을 한 줄 글로: 빈칸이 아닌 값을 ' · '로 잇고, 모두 비면 '(빈칸)' (미리 보기·설정 기록). */
+export const cellsText = (rows: Cell[][]) => {
 	const cells = rows.flat().map(v => String(v).trim()).filter(Boolean);
 	return cells.length ? cells.join(' · ') : '(빈칸)';
 };
 
 /** 화면 미리 보기 줄: '고친 곳: 바뀌기 전 → 바뀐 뒤'. */
 export function describe(writes: CellWrite[]): string[] {
-	return writes.map(w => `${w.label}: ${shown(w.before)} → ${shown(w.after)}`);
+	return writes.map(w => `${w.label}: ${cellsText(w.before)} → ${cellsText(w.after)}`);
 }
