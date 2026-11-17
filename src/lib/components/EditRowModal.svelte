@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { createEventDispatcher } from 'svelte';
 	import DatePicker from './DatePicker.svelte';
-	import { paymentMethodsUrl, withCurrentValue } from '$lib/ledger/paymentMethods';
+	import { accountsUrl, paymentMethodsUrl, withCurrentValue } from '$lib/ledger/paymentMethods';
 	
 	const dispatch = createEventDispatcher();
 	
@@ -38,7 +38,12 @@
 		withCurrentValue(paymentMethodList, editedData[headers.findIndex((header: string) => isPaymentMethodField(header))])
 	);
 	let isLoadingPaymentMethods = $state(false); // 결제방식 로딩 상태
-	let accountOptions = $state<string[]>([]); // 계정 옵션들
+	let accountList = $state<string[]>([]); // 읽어 온 그 달 계정 목록
+	let accountSheet = $state<string | null | undefined>(undefined); // 계정을 읽은 달 탭 (undefined = 아직 안 읽음)
+	// 보이는 목록: 지금 줄의 계정이 그 달 목록에 없으면 맨 앞에 (줄을 열 때마다 새로 만든다)
+	const accountOptions = $derived(
+		withCurrentValue(accountList, editedData[headers.findIndex((header: string) => isAccountField(header))])
+	);
 	let isLoadingAccounts = $state(false); // 계정 로딩 상태
 	
 	// DatePicker에서 사용할 날짜 정보
@@ -245,14 +250,16 @@
 
 	// 계정 옵션 가져오기
 	async function fetchAccountOptions() {
-		if (!spreadsheetId || !accessToken || isLoadingAccounts || accountOptions.length > 0) {
-			return; // 이미 로드됐거나 로딩 중이거나 필요한 정보가 없으면 스킵
+		// 같은 달 탭에서 이미 읽었거나 로딩 중이거나 필요한 정보가 없으면 스킵 (다른 달로 옮기면 다시 읽는다)
+		if (!spreadsheetId || !accessToken || isLoadingAccounts || (accountSheet === sheetName && accountList.length > 0)) {
+			return;
 		}
 		
 		isLoadingAccounts = true;
+		const requestedSheet = sheetName;
 		
 		try {
-			const response = await fetch(`/api/sheets/${spreadsheetId}/accounts`, {
+			const response = await fetch(accountsUrl(spreadsheetId, requestedSheet), {
 				headers: {
 					'Authorization': `Bearer ${accessToken}`,
 					'Content-Type': 'application/json'
@@ -261,19 +268,9 @@
 			
 			if (response.ok) {
 				const data = await response.json();
-				let fetchedAccounts = data.accounts || [];
-				
-				// 현재 행의 계정 값이 옵션에 없으면 추가
-				const accountFieldIndex = headers.findIndex(header => isAccountField(header));
-				if (accountFieldIndex !== -1 && editedData[accountFieldIndex]) {
-					const currentAccountValue = editedData[accountFieldIndex].toString().trim();
-					if (currentAccountValue && !fetchedAccounts.includes(currentAccountValue)) {
-						fetchedAccounts = [currentAccountValue, ...fetchedAccounts];
-					}
-				}
-				
-				accountOptions = fetchedAccounts;
-				console.log('Account options loaded:', $state.snapshot(accountOptions));
+				accountList = data.accounts || [];
+				accountSheet = requestedSheet;
+				console.log('Account options loaded:', $state.snapshot(accountList));
 			} else {
 				console.error('Failed to fetch account options:', response.statusText);
 			}
@@ -295,8 +292,9 @@
 		}
 	});
 
-	// 모달이 열릴 때 계정 옵션 로드
+	// 모달이 열릴 때 계정 옵션 로드 (보고 있는 달 탭이 바뀌어도 다시 로드)
 	$effect(() => {
+		void sheetName;
 		if (isOpen && headers.some((header: string) => isAccountField(header))) {
 			// 데이터 초기화가 완료된 후 계정 옵션 로드
 			if (editedData && editedData.length > 0) {

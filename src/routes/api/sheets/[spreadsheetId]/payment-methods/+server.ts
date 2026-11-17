@@ -1,20 +1,11 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { FULL_LIST_RANGE, monthListRange, pickPaymentMethods } from '$lib/ledger/paymentMethods';
+import { FULL_LIST_RANGE, monthListRange } from '$lib/ledger/paymentMethods';
+import { readMonthOrFull } from '$lib/server/monthList';
 
 // Simple in-memory cache for payment method options (문서·탭마다 따로)
 let paymentMethodsCache: { [key: string]: { data: string[], timestamp: number } } = {};
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
-
-async function readRange(spreadsheetId: string, range: string, accessToken: string): Promise<Response> {
-	const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(range)}`;
-	return fetch(url, {
-		headers: {
-			'Authorization': `Bearer ${accessToken}`,
-			'Content-Type': 'application/json'
-		}
-	});
-}
 
 export const GET: RequestHandler = async ({ params, request, url }) => {
 	const { spreadsheetId } = params;
@@ -39,39 +30,28 @@ export const GET: RequestHandler = async ({ params, request, url }) => {
 	
 	try {
 		// 그 달 탭의 '이달 쓸 카드'. 비었거나 읽지 못하면(AH열이 없는 옛 문서 등) 계정 탭 전체 목록
-		let accounts: string[] = [];
-		if (sheet) {
-			const monthResponse = await readRange(spreadsheetId, monthListRange(sheet), accessToken);
-			if (monthResponse.ok) {
-				accounts = pickPaymentMethods((await monthResponse.json()).values);
-			}
-		}
-		if (accounts.length === 0) {
-			const response = await readRange(spreadsheetId, FULL_LIST_RANGE, accessToken);
-			if (!response.ok) {
-				const errorText = await response.text();
-				console.error('Google Sheets API error:', {
-					status: response.status,
-					statusText: response.statusText,
-					error: errorText
-				});
-				
-				return json({
-					error: `Failed to fetch payment methods: ${response.statusText}`,
-					details: errorText
-				}, { status: response.status });
-			}
-			accounts = pickPaymentMethods((await response.json()).values);
+		const got = await readMonthOrFull(spreadsheetId, accessToken, sheet ? monthListRange(sheet) : null, FULL_LIST_RANGE);
+		if (!got.ok) {
+			const errorText = await got.response.text();
+			console.error('Google Sheets API error:', {
+				status: got.response.status,
+				statusText: got.response.statusText,
+				error: errorText
+			});
+			return json({
+				error: `Failed to fetch payment methods: ${got.response.statusText}`,
+				details: errorText
+			}, { status: got.response.status });
 		}
 		
 		// Cache the results
 		paymentMethodsCache[cacheKey] = {
-			data: accounts,
+			data: got.values,
 			timestamp: now
 		};
 		
 		return json({
-			accounts,
+			accounts: got.values,
 			cached: false
 		});
 		

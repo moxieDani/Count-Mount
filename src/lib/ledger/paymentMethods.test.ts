@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-	FULL_LIST_RANGE, monthListRange, paymentMethodsUrl, pickPaymentMethods, withCurrentValue
+	FULL_ACCOUNT_RANGE, FULL_LIST_RANGE, accountsUrl, monthAccountRange, monthListRange, paymentMethodsUrl,
+	pickListValues, pickPaymentMethods, withCurrentValue
 } from './paymentMethods';
 
 describe('결제방식 목록 다듬기', () => {
@@ -35,5 +36,20 @@ describe('화면이 쓰는 도우미', () => {
 		expect(withCurrentValue(['A'], '')).toEqual(['A']);
 		expect(withCurrentValue(['A'], null)).toEqual(['A']);
 		expect(withCurrentValue(['A'], undefined)).toEqual(['A']);
+	});
+});
+
+
+describe('계정 목록 (이달 쓸 계정)', () => {
+	it('그 달 탭의 AI27:AI56, 전체는 계정항목', () => {
+		expect(monthAccountRange('5월')).toBe("'5월'!AI27:AI56");
+		expect(FULL_ACCOUNT_RANGE).toBe('계정항목');
+		expect(accountsUrl('S', '5월')).toBe(`/api/sheets/S/accounts?sheet=${encodeURIComponent('5월')}`);
+		expect(accountsUrl('S', null)).toBe('/api/sheets/S/accounts');
+	});
+
+	it('목록 다듬기는 결제방식과 같은 함수', () => {
+		expect(pickListValues([['외식'], [''], [' 배달 ']])).toEqual(['외식', '배달']);
+		expect(pickPaymentMethods).toBe(pickListValues);
 	});
 });

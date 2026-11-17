@@ -13,8 +13,9 @@ export function monthListRange(sheet: string): string {
 	return `'${sheet.replaceAll("'", "''")}'!AH27:AH56`;
 }
 
-/** 읽은 값을 목록으로: 글로 바꿔 앞뒤 띄어쓰기를 지우고, 빈칸과 구분선(-만 있는 글)을 뺀다. 차례 유지, 같은 이름은 첫 번째만. */
-export function pickPaymentMethods(values: unknown[][] | undefined): string[] {
+/** 읽은 값을 목록으로: 글로 바꿔 앞뒤 띄어쓰기를 지우고, 빈칸과 구분선(-만 있는 글)을 뺀다. 차례 유지, 같은 이름은 첫 번째만.
+ *  결제방식·계정 목록이 함께 쓴다. */
+export function pickListValues(values: unknown[][] | undefined): string[] {
 	const out: string[] = [];
 	for (const cell of (values ?? []).flat()) {
 		const text = cell == null ? '' : String(cell).trim();
@@ -33,4 +34,20 @@ export function paymentMethodsUrl(spreadsheetId: string, sheet: string | null | 
 export function withCurrentValue(options: string[], current: string | null | undefined): string[] {
 	const value = (current ?? '').toString().trim();
 	return value && !options.includes(value) ? [value, ...options] : options;
+}
+
+export const pickPaymentMethods = pickListValues;
+
+/** 계정 전체 목록: 이름 붙인 범위 '계정항목'(비고정 소비지출 30칸). */
+export const FULL_ACCOUNT_RANGE = '계정항목';
+
+/** 그 달 탭의 '이달 쓸 계정' 범위 (그만 쓴 분류는 시트 수식이 뺀다). */
+export function monthAccountRange(sheet: string): string {
+	return `'${sheet.replaceAll("'", "''")}'!AI27:AI56`;
+}
+
+/** 지출 추가·고치기 화면이 부르는 계정 목록 주소. */
+export function accountsUrl(spreadsheetId: string, sheet: string | null | undefined): string {
+	const base = `/api/sheets/${spreadsheetId}/accounts`;
+	return sheet ? `${base}?sheet=${encodeURIComponent(sheet)}` : base;
 }
