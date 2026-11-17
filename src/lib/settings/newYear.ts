@@ -16,7 +16,8 @@ const dateCell = (d: string | null): Cell => (!d ? '' : DATE.test(d) ? dateToSer
 /** 날짜 글이 cutoff 전인가 (날짜가 아닌 글·빈칸은 '끝 없음'). */
 const before = (d: string | null, cutoff: string) => !!d && DATE.test(d) && d < cutoff;
 const blankRows = (rows: Cell[][]) => rows.map(r => r.map(() => '' as Cell));
-const write = (range: string, after: Cell[][], label: string): CellWrite => ({ range, before: blankRows(after), after, label });
+const write = (range: string, after: Cell[][], label: string, dates?: number[]): CellWrite =>
+	({ range, before: blankRows(after), after, label, ...(dates ? { dates } : {}) });
 const pad = (rows: Cell[][], size: number, width: number) =>
 	Array.from({ length: size }, (_, i) => rows[i] ?? Array.from({ length: width }, () => '' as Cell));
 
@@ -28,14 +29,14 @@ export function planNewYear(last: YearSettings, year: number): CellWrite[] {
 
 	// 분류: 구간마다 남은 분류를 앞자리부터
 	const kept: Record<string, Category[]> = {};
-	const dropped = new Set<string>();
+	const droppedFixed = new Set<string>();   // 고정비 줄의 분류는 고정 소비지출 구간 이름(고정비항목)
 	for (const sec of SECTIONS) {
 		const all = last.categories.filter(c => c.section === sec.key && c.name);
 		kept[sec.key] = all.filter(c => !before(c.stop, cutoff));
-		all.filter(c => before(c.stop, cutoff)).forEach(c => dropped.add(c.name));
+		if (sec.key === 'fixed') all.filter(c => before(c.stop, cutoff)).forEach(c => droppedFixed.add(c.name));
 		const size = sec.last - sec.first + 1;
 		out.push(write(`${ACCOUNT_TAB}!C${sec.first}:E${sec.last}`,
-			pad(kept[sec.key].map(c => [c.group, c.name, dateCell(c.stop)]), size, 3), `새해 · 지출 분류 · ${sec.name}`));
+			pad(kept[sec.key].map(c => [c.group, c.name, dateCell(c.stop)]), size, 3), `새해 · 지출 분류 · ${sec.name}`, [2]));
 	}
 
 	// 카드: 묶음마다 남은 카드를 앞자리부터, 구분선 자리는 '------'
@@ -53,29 +54,30 @@ export function planNewYear(last: YearSettings, year: number): CellWrite[] {
 		});
 	}
 	out.push(write(`${ACCOUNT_TAB}!F4:I33`, main, '새해 · 카드'));
-	out.push(write(`${ACCOUNT_TAB}!L4:O33`, state, '새해 · 카드 상태·날짜'));
+	out.push(write(`${ACCOUNT_TAB}!L4:O33`, state, '새해 · 카드 상태·날짜', [1, 2, 3]));
 
 	// 카드 알림 연결: 뺀 카드의 줄은 빼고 앞줄부터
 	const alerts = last.alerts.filter(a => !removedCards.has(a.method))
 		.map(a => [a.method, a.company, a.front, a.back, a.smsAmount ?? ''] as Cell[]);
 	out.push(write(`'${AUTO_TAB}'!A${ALERT_ROWS.first}:E${ALERT_ROWS.last}`, pad(alerts, ALERT_ROWS.last - ALERT_ROWS.first + 1, 5), '새해 · 카드 알림 연결'));
 
-	// 고정비 자동 채우기: 뺀 분류의 줄은 빼고 앞줄부터
-	const rules = last.fixedRules.filter(r => !dropped.has(r.label)).map(r => [r.label, r.text] as Cell[]);
+	// 고정비 자동 채우기: 뺀 고정 분류의 줄은 빼고 앞줄부터 (같은 이름이 남은 고정 분류에 있으면 남긴다)
+	const keptFixed = new Set(kept.fixed.map(c => c.name));
+	const rules = last.fixedRules.filter(r => !droppedFixed.has(r.label) || keptFixed.has(r.label)).map(r => [r.label, r.text] as Cell[]);
 	out.push(write(`'${AUTO_TAB}'!G${FIXED_ROWS.first}:H${FIXED_ROWS.last}`, pad(rules, FIXED_ROWS.last - FIXED_ROWS.first + 1, 2), '새해 · 고정비 자동 채우기'));
 
-	// 예산: 남은 분류 이름으로 지난해 금액
-	const amountOf = new Map(last.budgets.map(b => [b.label, b.amount]));
+	// 예산: 남은 분류의 지난해 자리(계정 줄)로 금액을 찾는다 (같은 이름이 두 구간에 있어도 섞이지 않게)
+	const amountOf = new Map(last.budgets.map(b => [b.accountRow, b.amount]));
 	for (const part of BUDGET_ROWS) {
 		const sec = SECTIONS.find(s => s.first === part.accountFirst)!;
-		const rows = kept[sec.key].map(c => [amountOf.get(c.name) ?? ''] as Cell[]);
+		const rows = kept[sec.key].map(c => [amountOf.get(c.row) ?? ''] as Cell[]);
 		out.push(write(`'${budgetTab(year)}'!F${part.budgetFirst}:F${part.budgetFirst + part.size - 1}`, pad(rows, part.size, 1), `새해 · 예산 · ${sec.name}`));
 	}
 
-	// 자동이체 내역: 그대로 (금액 칸은 숫자로)
+	// 자동이체 내역: 읽은 값 그대로 (금액 칸의 숫자 글은 숫자로)
 	for (const t of last.transfers) {
 		const rows: Cell[][] = Array.from({ length: TRANSFER_ROWS }, () => Array.from({ length: 10 }, () => '' as Cell));
-		for (const r of t.rows) rows[r.row - t.start - 1] = transferCells(r.cells);
+		for (const r of t.rows) rows[r.row - t.start - 1] = transferCells(r.cells, r.raw);
 		out.push(write(`'${TRANSFER_TAB}'!A${t.start + 1}:J${t.start + TRANSFER_ROWS}`, rows, `새해 · 자동이체 내역 · ${t.name}`));
 		if (t.income !== null) out.push(write(`'${TRANSFER_TAB}'!B${t.start + 21}`, [[t.income]], `새해 · 자동이체 내역 · ${t.name} · 월 수입`));
 		if (t.memo) out.push(write(`'${TRANSFER_TAB}'!B${t.start + 24}`, [[t.memo]], `새해 · 자동이체 내역 · ${t.name} · 메모`));

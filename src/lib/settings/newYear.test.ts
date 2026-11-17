@@ -71,4 +71,21 @@ describe('새해 설정 가져오기', () => {
 		expect(at(writes, "'자동이체 내역'!B25")).toEqual([['메모글']]);
 		expect(writes.every(w => w.before.flat().every(v => v === ''))).toBe(true);   // 빈 틀에 쓴다
 	});
+
+	it('같은 이름이 고정·비고정 두 구간에 있어도 예산·고정비 줄은 자리로 따라간다', () => {
+		const s = parseSettings([
+			rowsAt(4, { 34: ['주거', '관리비'], 59: ['주거', '관리비', d('2026-05-01')] }),
+			[], [], rowsAt(3, { 3: ['관리비', '관리비'] }),
+			rowsAt(1, { 22: ['', '', 250000], 49: ['', '', 9000] }), [], []
+		], 2026);
+		const w = planNewYear(s, 2027);
+		expect(at(w, "'2027년 예산'!F22:F46")![0]).toEqual([250000]);
+		expect(at(w, "'자동 기록 설정'!G3:H22")![0]).toEqual(['관리비', '관리비']);
+	});
+
+	it('자동이체 줄의 날짜·체크 칸은 값 그대로', () => {
+		const raw = ['1. 용돈', 100000, '', 46096, '', '', '', true, 5000, ''];
+		const s = parseSettings([[], [], [], [], [], rowsAt(1, { 1: ['* 서은'], 2: raw }), []], 2026);
+		expect(at(planNewYear(s, 2027), "'자동이체 내역'!A2:J21")![0]).toEqual(raw);
+	});
 });

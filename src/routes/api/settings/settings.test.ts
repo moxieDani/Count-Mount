@@ -92,6 +92,16 @@ describe('설정 경로', () => {
 		expect(log.body.values[1].slice(2)).toEqual(['카드 알림 연결 · 기순_삼성', '(빈칸)', '기순_삼성 · 삼성 · 0123']);
 	});
 
+	it('설정 기록의 날짜는 날짜로', async () => {
+		const STOP = { range: '계정!E60', before: [['']], after: [[46447]], label: '지출 분류 · 배달 · 그만 쓴 날', dates: [0] };
+		const calls = stubGoogle({ read: [[]] });
+		const res = await one.POST(req('http://x/api/settings/S', 'Bearer t', { year: 2026, writes: [STOP] }));
+		expect(await res.json()).toEqual({ ok: true });
+		const write = calls.find(c => c.url.pathname.endsWith('/values:batchUpdate'))!;
+		expect(write.body.data).toEqual([{ range: STOP.range, values: [[46447]] }]);
+		expect(calls.find(c => c.url.pathname.includes(':append'))!.body.values[0].slice(3)).toEqual(['(빈칸)', '2027-03-01']);
+	});
+
 	it('쓰기 실패면 기록 없음', async () => {
 		const calls = stubGoogle({ read: [[[400000]]], writeStatus: 500 });
 		const res = await one.POST(req('http://x/api/settings/S', 'Bearer t', { year: 2026, writes: [WRITE] }));

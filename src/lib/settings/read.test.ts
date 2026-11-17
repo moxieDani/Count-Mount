@@ -63,7 +63,7 @@ describe('설정 읽기', () => {
 			0: rowsAt(4, { 34: ['주거', '관리비'], 59: ['식비', '외식'] }),
 			4: rowsAt(1, { 22: ['', '', 250000], 49: ['', '', 400000] })
 		}), 2026);
-		expect(s.budgets).toEqual([{ row: 22, label: '관리비', amount: 250000 }, { row: 49, label: '외식', amount: 400000 }]);
+		expect(s.budgets).toEqual([{ row: 22, accountRow: 34, label: '관리비', amount: 250000 }, { row: 49, accountRow: 59, label: '외식', amount: 400000 }]);
 	});
 
 	it('자동이체 구역 셋', () => {
@@ -72,7 +72,8 @@ describe('설정 읽기', () => {
 				27: ['* 기순'], 28: ['1. 용돈', 50000], 53: ['* 생활비 통장'] })
 		}), 2026);
 		expect(s.transfers.map(t => [t.name, t.start])).toEqual([['서은', 1], ['기순', 27], ['생활비 통장', 53]]);
-		expect(s.transfers[0].rows).toEqual([{ row: 2, cells: ['1. 용돈', '100000', '', '', '', '현금이체', '', '', '', ''] }]);
+		expect(s.transfers[0].rows).toEqual([{ row: 2, cells: ['1. 용돈', '100000', '', '', '', '현금이체', '', '', '', ''],
+			raw: ['1. 용돈', 100000, '', '', '', '현금이체', '', '', '', ''] }]);   // raw: 읽은 값 그대로(숫자는 숫자)
 		expect([s.transfers[0].income, s.transfers[0].memo]).toEqual([3000000, '월급 메모']);
 		expect(s.transfers[1].rows.map(r => r.row)).toEqual([28]);
 		expect(s.transfers[2].rows).toEqual([]);

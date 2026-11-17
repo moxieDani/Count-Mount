@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { parseSettings } from './read';
 import {
-	addCard, addCategory, clearCardAlert, describe as describeWrites, setBudget, setCardAlert, setStopDate,
+	addCard, addCategory, clearCardAlert, describe as describeWrites, parseAmount, setBudget, setBudgets, setCardAlert, setStopDate,
 	setTransferRow, updateCard, validateName
 } from './changes';
 
@@ -27,7 +27,7 @@ function settings(over: { account?: Record<number, unknown[]>; cards?: Record<nu
 describe('바꾸기 계산', () => {
 	it('분류 더하기는 그 구간 첫 빈 자리', () => {
 		const writes = addCategory(settings(), 'variable', '식비', '카페');
-		expect(writes).toEqual([{ range: '계정!C61:E61', before: [['', '', '']], after: [['식비', '카페', '']], label: '지출 분류 · 비고정 소비지출 · 카페' }]);
+		expect(writes).toEqual([{ range: '계정!C61:E61', before: [['', '', '']], after: [['식비', '카페', '']], label: '지출 분류 · 비고정 소비지출 · 카페', dates: [2] }]);
 	});
 
 	it('자리가 없으면 오류', () => {
@@ -49,7 +49,7 @@ describe('바꾸기 계산', () => {
 		const writes = addCard(settings(), 'kisoon', { name: '기순_우리', settle: '기순', start: '2026-03-15' });
 		expect(writes).toEqual([
 			{ range: '계정!F6:I6', before: [['', '', '', '']], after: [['기순_우리', '기순', '', '']], label: '카드 · 기순 · 기순_우리' },
-			{ range: '계정!L6:O6', before: [['', '', '', '']], after: [['사용 중', 46096, '', '']], label: '카드 · 기순 · 기순_우리 · 상태·날짜' }
+			{ range: '계정!L6:O6', before: [['', '', '', '']], after: [['사용 중', 46096, '', '']], label: '카드 · 기순 · 기순_우리 · 상태·날짜', dates: [1, 2, 3] }
 		]);
 	});
 
@@ -80,7 +80,7 @@ describe('바꾸기 계산', () => {
 	});
 
 	it('그만 쓴 날·예산·자동이체 줄', () => {
-		expect(setStopDate(settings(), 59, null)).toEqual([{ range: '계정!E59', before: [[46096]], after: [['']], label: '지출 분류 · 외식 · 그만 쓴 날' }]);
+		expect(setStopDate(settings(), 59, null)).toEqual([{ range: '계정!E59', before: [[46096]], after: [['']], label: '지출 분류 · 외식 · 그만 쓴 날', dates: [0] }]);
 		expect(setBudget(settings(), 49, 450000)).toEqual([{ range: "'2026년 예산'!F49", before: [[400000]], after: [[450000]], label: '예산 · 외식' }]);
 		const t = setTransferRow(settings(), '서은', null, ['2. 청약', '20,000원', '18000', '신한 -> 국민 2만원']);
 		// 금액·변경 금액은 숫자로 써야 시트 합계 수식이 더한다 (글자 '20000'은 SUM이 건너뜀)
@@ -92,5 +92,39 @@ describe('바꾸기 계산', () => {
 		expect(Array.isArray(writes) && describeWrites(writes)).toEqual(['예산 · 외식: 400000 → 450000']);
 		const add = addCategory(settings(), 'variable', '식비', '카페');
 		expect(Array.isArray(add) && describeWrites(add)).toEqual(['지출 분류 · 비고정 소비지출 · 카페: (빈칸) → 식비 · 카페']);
+	});
+
+	it('미리 보기의 날짜는 날짜로, 가운데 빈칸은 빈칸으로', () => {
+		const stop = setStopDate(settings(), 60, '2027-03-01');
+		expect(Array.isArray(stop) && describeWrites(stop)).toEqual(['지출 분류 · 배달 · 그만 쓴 날: (빈칸) → 2027-03-01']);
+		const card = updateCard(settings(), 1, { expiry: '2029-01-31' });
+		expect(Array.isArray(card) && describeWrites(card)[1]).toBe('카드 · 기순 · 기순_롯데 · 상태·날짜: (빈칸) → (빈칸) · (빈칸) · 2029-01-31');
+	});
+
+	it('금액 글 읽기: 쉼표·원·소수, 빈칸은 null, 숫자가 아니면 undefined', () => {
+		expect(parseAmount('450,000원')).toBe(450000);
+		expect(parseAmount(' 83333.5 ')).toBe(83333.5);
+		expect(parseAmount('-1200')).toBe(-1200);
+		expect(parseAmount('')).toBeNull();
+		expect(parseAmount('-')).toBeUndefined();
+		expect(parseAmount('12a')).toBeUndefined();
+	});
+
+	it('예산 저장은 고친 줄만 쓴다', () => {
+		const s = parseSettings([rowsAt(4, { 59: ['식비', '외식'], 60: ['식비', '배달'] }), [], [], [], rowsAt(1, { 49: ['', '', 83333.33], 50: ['', '', 5000] }), [], []], 2026);
+		expect(setBudgets(s, { 49: '83333.33', 50: '5000' })).toEqual([]);   // 그대로면 쓰지 않는다 (소수도 그대로)
+		expect(setBudgets(s, { 49: '83333.33', 50: '6,000원' })).toEqual(setBudget(s, 50, 6000));
+		expect(setBudgets(s, { 49: '83333.33', 50: '' })).toEqual(setBudget(s, 50, null));
+		expect(setBudgets(s, { 49: '-', 50: '5000' })).toEqual({ error: '금액은 숫자로 적어 주세요' });
+	});
+
+	it('자동이체 줄을 고쳐도 손대지 않은 칸은 원래 값 그대로', () => {
+		const raw = ['1. 용돈', 100000, '', 46096, '', '', '', true, 5000, ''];
+		const s = parseSettings([[], [], [], [], [], rowsAt(1, { 1: ['* 서은'], 2: raw }), []], 2026);
+		const cells = [...s.transfers[0].rows[0].cells];
+		cells[0] = '1. 용돈(고침)';
+		const t = setTransferRow(s, '서은', 2, cells);
+		expect(Array.isArray(t) && t[0].before).toEqual([raw]);
+		expect(Array.isArray(t) && t[0].after).toEqual([['1. 용돈(고침)', ...raw.slice(1)]]);
 	});
 });

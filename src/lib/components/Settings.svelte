@@ -4,7 +4,7 @@
 	import { CARD_COMPANIES, CARD_GROUPS, CARD_STATUSES, SECTIONS, type GroupKey, type SectionKey } from '$lib/settings/layout';
 	import type { Card, CardAlert, YearSettings } from '$lib/settings/read';
 	import {
-		addCard, addCategory, clearCardAlert, clearFixedRule, clearTransferRow, describe, setBudget, setCardAlert,
+		addCard, addCategory, amountText, clearCardAlert, clearFixedRule, clearTransferRow, describe, parseAmount, setBudgets, setCardAlert,
 		setFixedRule, setStopDate, setTransferIncome, setTransferMemo, setTransferRow, updateCard,
 		type CellWrite, type Result
 	} from '$lib/settings/changes';
@@ -203,24 +203,21 @@
 	function submitAlert(method: string, row: number | null) {
 		if (!settings) return;
 		const d = newAlert[row === null ? `new:${method}` : `row:${row}`];
-		const sms = d.sms.trim() ? Number(d.sms.replace(/[^\d]/g, '')) : null;
+		const sms = parseAmount(d.sms);
+		if (sms === undefined) return propose({ error: '문자 오는 금액은 숫자로 적어 주세요' });
 		propose(setCardAlert(settings, row, { method, company: d.company, front: d.front.trim(), back: d.back.trim(), smsAmount: sms }));
 	}
 
 	// ── 예산 ──
 	let budgetDraft = $state<Record<number, string>>({});
 	function submitBudgets() {
+		if (settings) propose(setBudgets(settings, budgetDraft));
+	}
+
+	function submitIncome(name: string) {
 		if (!settings) return;
-		const writes: CellWrite[] = [];
-		for (const b of settings.budgets) {
-			const text = (budgetDraft[b.row] ?? '').replace(/[^\d-]/g, '');
-			const amount = text === '' ? null : Number(text);
-			if (amount === b.amount) continue;
-			const r = setBudget(settings, b.row, amount);
-			if ('error' in r) return propose(r);
-			writes.push(...r);
-		}
-		propose(writes);
+		const amount = parseAmount(incomeDraft[name] ?? '');
+		propose(amount === undefined ? { error: '월 수입은 숫자로 적어 주세요' } : setTransferIncome(settings, name, amount));
 	}
 
 	// ── 자동이체 내역 ──
@@ -246,14 +243,14 @@
 		for (const a of settings.alerts) alertForms[`row:${a.row}`] = { company: a.company, front: a.front, back: a.back, sms: a.smsAmount === null ? '' : String(a.smsAmount) };
 		for (const c of settings.cards.filter(c => c.name)) alertForms[`new:${c.name}`] = { company: CARD_COMPANIES[0], front: '', back: '', sms: '' };
 		newAlert = alertForms;
-		budgetDraft = Object.fromEntries(settings.budgets.map(b => [b.row, b.amount === null ? '' : String(b.amount)]));
+		budgetDraft = Object.fromEntries(settings.budgets.map(b => [b.row, amountText(b.amount)]));
 		const tDraft: Record<string, string[]> = {};
 		for (const t of settings.transfers) {
 			for (const r of t.rows) tDraft[`${t.name}:${r.row}`] = [...r.cells];
 			tDraft[`${t.name}:new`] = Array.from({ length: 10 }, () => '');
 		}
 		transferDraft = tDraft;
-		incomeDraft = Object.fromEntries(settings.transfers.map(t => [t.name, t.income === null ? '' : String(t.income)]));
+		incomeDraft = Object.fromEntries(settings.transfers.map(t => [t.name, amountText(t.income)]));
 		memoDraft = Object.fromEntries(settings.transfers.map(t => [t.name, t.memo]));
 		const fDraft: Record<string, { label: string; text: string }> = { new: { label: '', text: '' } };
 		for (const r of settings.fixedRules) fDraft[`row:${r.row}`] = { label: r.label, text: r.text };
@@ -432,7 +429,7 @@
 					{/each}
 					<div class="form">
 						<label>월 수입 <input inputmode="numeric" bind:value={incomeDraft[t.name]} /></label>
-						<button class="btn small" onclick={() => settings && propose(setTransferIncome(settings, t.name, incomeDraft[t.name].trim() ? Number(incomeDraft[t.name].replace(/[^\d-]/g, '')) : null))}>적기</button>
+						<button class="btn small" onclick={() => submitIncome(t.name)}>적기</button>
 					</div>
 					<div class="form">
 						<label>메모 <input bind:value={memoDraft[t.name]} /></label>

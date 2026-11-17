@@ -11,8 +11,10 @@ export type Card = {
 };
 export type CardAlert = { row: number; method: string; company: string; front: string; back: string; smsAmount: number | null };
 export type FixedRule = { row: number; label: string; text: string };
-export type Budget = { row: number; label: string; amount: number | null };
-export type TransferSection = { name: string; start: number; rows: { row: number; cells: string[] }[]; income: number | null; memo: string };
+export type Budget = { row: number; accountRow: number; label: string; amount: number | null };
+/** 시트에서 읽은 칸 값 그대로(숫자·참거짓·글). 손대지 않은 칸은 이 값으로 다시 쓴다. */
+export type RawCell = string | number | boolean;
+export type TransferSection = { name: string; start: number; rows: { row: number; cells: string[]; raw: RawCell[] }[]; income: number | null; memo: string };
 export type LogEntry = { when: string; who: string; where: string; before: string; after: string };
 export type YearSettings = {
 	year: number; categories: Category[]; cards: Card[]; alerts: CardAlert[]; fixedRules: FixedRule[];
@@ -38,6 +40,7 @@ const text = (v: unknown): string => (v === null || v === undefined ? '' : Strin
 const isNumber = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 /** 날짜 칸: 일련번호면 날짜 글, 글이면 그 글(점검 프로그램이 알린다), 빈칸이면 null */
 const dateOf = (v: unknown): string | null => (isNumber(v) ? serialToDate(v) : text(v) || null);
+const rawCell = (v: unknown): RawCell => (isNumber(v) || typeof v === 'boolean' ? v : text(v));
 /** 번호 칸: 숫자로 적힌 것은 정수 글로, 글은 그대로 */
 const digits = (v: unknown): string => (isNumber(v) ? String(Math.trunc(v)) : text(v));
 
@@ -79,14 +82,15 @@ export function parseSettings(valueRanges: unknown[][][], year: number): YearSet
 	const budgets: Budget[] = BUDGET_ROWS.flatMap(part =>
 		Array.from({ length: part.size }, (_, k) => {
 			const row = part.budgetFirst + k, amount = at(budgetRows, row - 1, 2);
-			return { row, label: nameAt(part.accountFirst + k), amount: isNumber(amount) ? amount : null };
+			return { row, accountRow: part.accountFirst + k, label: nameAt(part.accountFirst + k), amount: isNumber(amount) ? amount : null };
 		})).filter(b => b.label);
 
 	const transfers: TransferSection[] = TRANSFER_SECTIONS.map(sec => {
-		const rows: { row: number; cells: string[] }[] = [];
+		const rows: TransferSection['rows'] = [];
 		for (let row = sec.start + 1; row <= sec.start + TRANSFER_ROWS; row++) {
-			const cells = Array.from({ length: 10 }, (_, c) => text(at(transferRows, row - 1, c)));
-			if (cells.some(Boolean)) rows.push({ row, cells });
+			const raw = Array.from({ length: 10 }, (_, c) => rawCell(at(transferRows, row - 1, c)));
+			const cells = raw.map(text);
+			if (cells.some(Boolean)) rows.push({ row, cells, raw });
 		}
 		const income = at(transferRows, sec.start + 21 - 1, 1);
 		return { name: sec.name, start: sec.start, rows, income: isNumber(income) ? income : null,

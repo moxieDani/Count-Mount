@@ -89,7 +89,8 @@ export const POST: RequestHandler = async ({ params, request }) => {
 
 		const by = await who(authorization);
 		const when = kstNow();
-		const rows = writes.map(w => [when, by, w.label, cellsText(w.before), cellsText(w.after)]);
+		const dates = (w: CellWrite) => (Array.isArray(w.dates) ? w.dates.filter(n => Number.isInteger(n)) : []);
+		const rows = writes.map(w => [when, by, w.label, cellsText(w.before, dates(w)), cellsText(w.after, dates(w))]);
 		const log = await fetch(
 			`${SHEETS}/${id}/values/${encodeURIComponent(`'${LOG_TAB}'!A:E`)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
 			{ method: 'POST', headers: { authorization, 'Content-Type': 'application/json' }, body: JSON.stringify({ values: rows }) }

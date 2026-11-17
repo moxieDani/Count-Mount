@@ -8,10 +8,11 @@ import {
 	ACCOUNT_TAB, ALERT_ROWS, AUTO_TAB, CARD_GROUPS, FIXED_ROWS, SECTIONS, TRANSFER_ROWS, TRANSFER_TAB,
 	budgetTab, type GroupKey, type SectionKey
 } from './layout';
-import { dateToSerial, type CardAlert, type YearSettings } from './read';
+import { dateToSerial, serialToDate, type CardAlert, type YearSettings } from './read';
 
-export type Cell = string | number;
-export type CellWrite = { range: string; before: Cell[][]; after: Cell[][]; label: string };
+export type Cell = string | number | boolean;
+/** dates: 날짜 일련번호가 든 열 자리(미리 보기·설정 기록에 날짜로 보인다). */
+export type CellWrite = { range: string; before: Cell[][]; after: Cell[][]; label: string; dates?: number[] };
 export type Result = CellWrite[] | { error: string };
 export type CardFields = {
 	name?: string; settle?: string; perf?: string; account?: string;
@@ -47,14 +48,15 @@ export function addCategory(s: YearSettings, section: SectionKey, group: string,
 		range: `${ACCOUNT_TAB}!C${slot.row}:E${slot.row}`,
 		before: [[slot.group, slot.name, dateCell(slot.stop)]],
 		after: [[group.trim(), name, '']],
-		label: `지출 분류 · ${sectionName(section)} · ${name}`
+		label: `지출 분류 · ${sectionName(section)} · ${name}`,
+		dates: [2]
 	}];
 }
 
 export function setStopDate(s: YearSettings, row: number, date: string | null): Result {
 	const c = s.categories.find(x => x.row === row && x.name);
 	if (!c) return { error: '분류가 없습니다' };
-	return [{ range: `${ACCOUNT_TAB}!E${row}`, before: [[dateCell(c.stop)]], after: [[dateCell(date)]], label: `지출 분류 · ${c.name} · 그만 쓴 날` }];
+	return [{ range: `${ACCOUNT_TAB}!E${row}`, before: [[dateCell(c.stop)]], after: [[dateCell(date)]], label: `지출 분류 · ${c.name} · 그만 쓴 날`, dates: [0] }];
 }
 
 function cardWrites(row: number, label: string, before: { main: Cell[]; state: Cell[] }, f: Required<Omit<CardFields, 'name'>> & { name: string }, withName: boolean): CellWrite[] {
@@ -63,7 +65,7 @@ function cardWrites(row: number, label: string, before: { main: Cell[]; state: C
 		: { range: `${ACCOUNT_TAB}!G${row}:I${row}`, before: [before.main.slice(1)], after: [[f.settle, f.perf, f.account]], label };
 	return [main, {
 		range: `${ACCOUNT_TAB}!L${row}:O${row}`, before: [before.state],
-		after: [[f.status, dateCell(f.start), dateCell(f.expiry), dateCell(f.cancel)]], label: `${label} · 상태·날짜`
+		after: [[f.status, dateCell(f.start), dateCell(f.expiry), dateCell(f.cancel)]], label: `${label} · 상태·날짜`, dates: [1, 2, 3]
 	}];
 }
 
@@ -133,21 +135,52 @@ export function clearFixedRule(s: YearSettings, row: number): Result {
 	return [{ range: auto(`G${row}:H${row}`), before: [[cur.label, cur.text]], after: [blanks(2)], label: `고정비 자동 채우기 · ${cur.label} · 지움` }];
 }
 
+/** 예산 저장: 입력 글이 처음 보인 글과 다른 줄만 쓴다 (손대지 않은 소수 금액·수식은 그대로). */
+export function setBudgets(s: YearSettings, drafts: Record<number, string>): Result {
+	const writes: CellWrite[] = [];
+	for (const b of s.budgets) {
+		const draft = drafts[b.row];
+		if (draft === undefined || draft.trim() === amountText(b.amount)) continue;
+		const amount = parseAmount(draft);
+		if (amount === undefined) return { error: '금액은 숫자로 적어 주세요' };
+		if (amount === b.amount) continue;
+		const r = setBudget(s, b.row, amount);
+		if ('error' in r) return r;
+		writes.push(...r);
+	}
+	return writes;
+}
+
 export function setBudget(s: YearSettings, row: number, amount: number | null): Result {
 	const b = s.budgets.find(x => x.row === row);
 	if (!b) return { error: '예산 줄이 없습니다' };
 	return [{ range: `'${budgetTab(s.year)}'!F${row}`, before: [[b.amount ?? '']], after: [[amount ?? '']], label: `예산 · ${b.label}` }];
 }
 
-/** 자동이체 줄 열 칸(A~J). 금액(B)·변경 금액(C)은 숫자로 써야 시트 합계 수식이 더한다('20,000원' → 20000). */
-export function transferCells(cells: (string | number)[]): Cell[] {
+/** 금액 글 → 숫자 (쉼표·띄어쓰기·'원'은 뺀다, 소수 됨). 빈칸이면 null, 숫자가 아니면 undefined. */
+export function parseAmount(text: string): number | null | undefined {
+	const t = text.replace(/[,\s원]/g, '');
+	if (t === '') return null;
+	return /^-?\d+(\.\d+)?$/.test(t) ? Number(t) : undefined;
+}
+
+/** 화면 입력 칸에 보이는 금액 글. */
+export const amountText = (n: number | null) => (n === null ? '' : String(n));
+
+/**
+ * 자동이체 줄 열 칸(A~J). 화면 글이 읽은 값의 글과 같으면(손대지 않은 칸) 읽은 값 그대로(날짜·체크·숫자 유지).
+ * 금액(B)·변경 금액(C)은 숫자로 써야 시트 합계 수식이 더한다('20,000원' → 20000).
+ */
+export function transferCells(cells: (string | number)[], raw: Cell[] = []): Cell[] {
 	return Array.from({ length: 10 }, (_, i) => {
 		const v = cells[i] ?? '';
-		if ((i === 1 || i === 2) && typeof v === 'string') {
-			const digits = v.replace(/[,\s원]/g, '');
-			if (/^-?\d+$/.test(digits)) return Number(digits);
+		const old = raw[i];
+		const out: Cell = old !== undefined && String(v).trim() === String(old).trim() ? old : v;
+		if ((i === 1 || i === 2) && typeof out === 'string') {
+			const n = parseAmount(out);
+			if (typeof n === 'number') return n;
 		}
-		return v;
+		return out;
 	});
 }
 
@@ -161,8 +194,8 @@ export function setTransferRow(s: YearSettings, sectionName: string, row: number
 	const target = row ?? freeRow(sec.rows.map(r => r.row), sec.start + 1, sec.start + TRANSFER_ROWS);
 	if (target === null) return { error: FULL };
 	const cur = sec.rows.find(r => r.row === target);
-	const after = transferCells(cells);
-	return [{ range: transfer(`A${target}:J${target}`), before: [cur ? cur.cells : blanks(10)], after: [after],
+	const after = transferCells(cells, cur?.raw);
+	return [{ range: transfer(`A${target}:J${target}`), before: [cur ? cur.raw : blanks(10)], after: [after],
 		label: `자동이체 내역 · ${sec.name} · ${after[0] || `${target}줄`}` }];
 }
 
@@ -170,7 +203,7 @@ export function clearTransferRow(s: YearSettings, sectionName: string, row: numb
 	const sec = section(s, sectionName);
 	const cur = sec?.rows.find(r => r.row === row);
 	if (!sec || !cur) return { error: '자동이체 줄이 없습니다' };
-	return [{ range: transfer(`A${row}:J${row}`), before: [cur.cells], after: [blanks(10)],
+	return [{ range: transfer(`A${row}:J${row}`), before: [cur.raw], after: [blanks(10)],
 		label: `자동이체 내역 · ${sec.name} · ${cur.cells[0] || `${row}줄`} · 지움` }];
 }
 
@@ -188,13 +221,20 @@ export function setTransferMemo(s: YearSettings, sectionName: string, memo: stri
 	return [{ range: transfer(`B${row}`), before: [[sec.memo]], after: [[memo]], label: `자동이체 내역 · ${sec.name} · 메모` }];
 }
 
-/** 칸 값을 한 줄 글로: 빈칸이 아닌 값을 ' · '로 잇고, 모두 비면 '(빈칸)' (미리 보기·설정 기록). */
-export const cellsText = (rows: Cell[][]) => {
-	const cells = rows.flat().map(v => String(v).trim()).filter(Boolean);
-	return cells.length ? cells.join(' · ') : '(빈칸)';
+/**
+ * 칸 값을 한 줄 글로 (미리 보기·설정 기록): 칸은 ' · ', 줄은 ' / '로 잇는다. 끝의 빈칸은 빼고 가운데 빈칸은 '(빈칸)',
+ * dates 자리의 일련번호는 YYYY-MM-DD. 모두 비면 '(빈칸)'.
+ */
+export const cellsText = (rows: Cell[][], dates: number[] = []) => {
+	const lines = rows.map(row => {
+		const cells = row.map((v, c) => (dates.includes(c) && typeof v === 'number' ? serialToDate(v) : String(v ?? '').trim()));
+		while (cells.length && !cells.at(-1)) cells.pop();
+		return cells.map(c => c || '(빈칸)').join(' · ');
+	}).filter(Boolean);
+	return lines.length ? lines.join(' / ') : '(빈칸)';
 };
 
 /** 화면 미리 보기 줄: '고친 곳: 바뀌기 전 → 바뀐 뒤'. */
 export function describe(writes: CellWrite[]): string[] {
-	return writes.map(w => `${w.label}: ${cellsText(w.before)} → ${cellsText(w.after)}`);
+	return writes.map(w => `${w.label}: ${cellsText(w.before, w.dates)} → ${cellsText(w.after, w.dates)}`);
 }
