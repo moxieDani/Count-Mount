@@ -22,3 +22,15 @@ export function pickPaymentMethods(values: unknown[][] | undefined): string[] {
 	}
 	return out;
 }
+
+/** 지출 추가·고치기 화면이 부르는 주소. 보고 있는 달 탭 이름이 있으면 그 달 목록을 받는다. */
+export function paymentMethodsUrl(spreadsheetId: string, sheet: string | null | undefined): string {
+	const base = `/api/sheets/${spreadsheetId}/payment-methods`;
+	return sheet ? `${base}?sheet=${encodeURIComponent(sheet)}` : base;
+}
+
+/** 지금 값(앞뒤 띄어쓰기 지움)이 있고 목록에 없으면 맨 앞에 넣는다(이미 적힌 값은 그 달 목록에 없어도 그대로 둔다). */
+export function withCurrentValue(options: string[], current: string | null | undefined): string[] {
+	const value = (current ?? '').toString().trim();
+	return value && !options.includes(value) ? [value, ...options] : options;
+}

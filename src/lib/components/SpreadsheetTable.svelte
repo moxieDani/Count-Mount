@@ -915,6 +915,7 @@
 	currentMonth={currentMonth}
 	spreadsheetId={spreadsheetId}
 	accessToken={session?.accessToken}
+	sheetName={tableData?.metadata?.sheetName ?? null}
 	on:close={closeEditModal}
 	on:save={handleModalSave}
 	on:delete={handleModalDelete}
@@ -929,6 +930,7 @@
 	currentMonth={currentMonth}
 	spreadsheetId={spreadsheetId}
 	accessToken={session?.accessToken}
+	sheetName={tableData?.metadata?.sheetName ?? null}
 	on:close={closeCreateModal}
 	on:save={handleCreateRow}
 />
