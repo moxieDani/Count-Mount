@@ -1,0 +1,66 @@
+/**
+ * 가계부 설정이 사는 시트 자리 (jarvis-core 정답표 agents/ledger/sheets/schema.py와 같은 값, 2026-11-17 재조정).
+ * 설정 화면은 이 상수로만 시트를 읽고 쓴다.
+ */
+
+export type SectionKey = 'income' | 'saving' | 'fixed' | 'variable';
+export type GroupKey = 'kisoon' | 'seoeun' | 'shared';
+
+/** 계정 탭 분류 구간 (줄): C 구분, D 이름, E 그만 쓴 날 */
+export const SECTIONS: { key: SectionKey; name: string; first: number; last: number }[] = [
+	{ key: 'income', name: '수입', first: 4, last: 13 },
+	{ key: 'saving', name: '비소비', first: 14, last: 33 },
+	{ key: 'fixed', name: '고정 소비지출', first: 34, last: 58 },
+	{ key: 'variable', name: '비고정 소비지출', first: 59, last: 88 }
+];
+
+const range = (a: number, b: number) => Array.from({ length: b - a + 1 }, (_, i) => a + i);
+
+/** 결제방식 자리 묶음. 자리 n → 계정 줄 n+3. 14·28은 구분선 자리 */
+export const CARD_GROUPS: { key: GroupKey; name: string; slots: number[] }[] = [
+	{ key: 'kisoon', name: '기순', slots: range(1, 13) },
+	{ key: 'seoeun', name: '서은', slots: range(15, 27) },
+	{ key: 'shared', name: '함께', slots: [29, 30] }
+];
+export const SEPARATOR_SLOTS = [14, 28];
+export const SEPARATOR = '------';
+export const slotRow = (slot: number) => slot + 3;
+
+/** 카드 줄 칸 (계정 F~O): F 이름, G 정산, H 실적, I 연결된 계좌, L 상태, M 시작일, N 만료일, O 해지일 */
+export const CARD_COLUMNS = { name: 'F', settle: 'G', perf: 'H', account: 'I', status: 'L', start: 'M', expiry: 'N', cancel: 'O' } as const;
+export const CARD_STATUSES = ['사용 중', '해지', '만료'];
+export const CARD_COMPANIES = ['KB국민', '롯데', '삼성', '우리', '현대', '신한', '하나', 'NH농협', '씨티', 'IBK', 'BC'];
+
+export const ACCOUNT_TAB = '계정';
+export const AUTO_TAB = '자동 기록 설정';
+export const ALERT_ROWS = { first: 3, last: 42 };   // A 결제방식 | B 카드사 | C 번호 앞자리 | D 번호 끝자리 | E 문자 오는 금액
+export const FIXED_ROWS = { first: 3, last: 22 };   // G 분류 | H 명세서에서 찾을 글
+export const LOG_TAB = '설정 기록';                   // A 때 | B 누가 | C 고친 곳 | D 바뀌기 전 | E 바뀐 뒤
+export const TRANSFER_TAB = '자동이체 내역';
+/** 자동이체 구역: 시작 줄 s(머리글), 줄 s+1~s+20(A~J), 월 수입 B(s+21), 합계 s+22, 남는 돈 s+23, 메모 B(s+24) */
+export const TRANSFER_SECTIONS = [
+	{ name: '서은', start: 1 }, { name: '기순', start: 27 }, { name: '생활비 통장', start: 53 }
+];
+export const TRANSFER_ROWS = 20;
+
+export const budgetTab = (year: number) => `${year}년 예산`;
+/** 예산 탭 분류 줄 ← 계정 탭 분류 줄 (금액은 F) */
+export const BUDGET_ROWS: { budgetFirst: number; accountFirst: number; size: number }[] = [
+	{ budgetFirst: 10, accountFirst: 4, size: 10 },    // 수입
+	{ budgetFirst: 22, accountFirst: 34, size: 25 },   // 고정 소비지출
+	{ budgetFirst: 49, accountFirst: 59, size: 30 },   // 비고정 소비지출
+	{ budgetFirst: 81, accountFirst: 14, size: 20 }    // 비소비
+];
+
+/** 한 번의 batchGet에 넣을 범위 (parseSettings가 이 차례로 받는다). */
+export function settingsRanges(year: number): string[] {
+	return [
+		`${ACCOUNT_TAB}!C4:E88`,
+		`${ACCOUNT_TAB}!F4:O33`,
+		`'${AUTO_TAB}'!A${ALERT_ROWS.first}:E${ALERT_ROWS.last}`,
+		`'${AUTO_TAB}'!G${FIXED_ROWS.first}:H${FIXED_ROWS.last}`,
+		`'${budgetTab(year)}'!D1:F100`,
+		`'${TRANSFER_TAB}'!A1:J77`,
+		`'${LOG_TAB}'!A2:E`
+	];
+}
