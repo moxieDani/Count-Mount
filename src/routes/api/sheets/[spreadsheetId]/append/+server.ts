@@ -1,6 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { findDuplicateRow } from '$lib/ledger/duplicate';
+import { firstEmptyRow, newRowRange, newRowValues, sortRange } from '$lib/ledger/rows';
 
 export const POST: RequestHandler = async ({ params, request }) => {
 	const { spreadsheetId } = params;
@@ -97,22 +98,15 @@ export const POST: RequestHandler = async ({ params, request }) => {
 			}
 		}
 		
-		// Step 2: 빈 행 찾기 (Y 컬럼이 비어있는 첫 번째 행)
-		let emptyRowIndex = -1;
-		for (let i = 0; i < 100; i++) { // Y27부터 Y126까지 100행 확인
-			if (i >= currentValues.length || !currentValues[i] || !currentValues[i][0]) {
-				emptyRowIndex = i;
-				break;
-			}
-		}
+		// Step 2: 빈 행 찾기 (Y~AD 여섯 칸이 모두 빈 첫 번째 행. AE(기록한 곳)만 남은 줄도 빈 줄)
+		const targetRow = firstEmptyRow(currentValues);
 		
-		if (emptyRowIndex === -1) {
+		if (targetRow === null) {
 			return json({ error: 'No empty rows available in Y27:AD126 range' }, { status: 400 });
 		}
 		
-		// Step 3: 빈 행에 데이터 추가 (PUT 대신 values:append 방식 사용)
-		const targetRow = 27 + emptyRowIndex; // Y27부터 시작하므로 27을 더함
-		const updateRange = `${sheetName}!Y${targetRow}:AD${targetRow}`;
+		// Step 3: 빈 행에 Y~AE 일곱 칸을 쓴다 (AE = 기록한 곳 '가계쀼')
+		const updateRange = newRowRange(sheetName, targetRow);
 		const updateUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(updateRange)}?valueInputOption=USER_ENTERED`;
 		
 		console.log('Attempting to update range:', updateRange);
@@ -120,7 +114,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		console.log('Data to insert:', values);
 		
 		const updateBody = {
-			values: [values],
+			values: [newRowValues(values)],
 			majorDimension: 'ROWS'
 		};
 
@@ -170,13 +164,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		const sortBody = {
 			requests: [{
 				sortRange: {
-					range: {
-						sheetId: sheetId,
-						startRowIndex: 26, // Y27 (0-based index이므로 26)
-						endRowIndex: 126, // Y126까지
-						startColumnIndex: 24, // Y 컬럼 (Y는 25번째 컬럼이므로 24)
-						endColumnIndex: 30 // AD 컬럼까지 (AD는 30번째 컬럼이므로 29+1)
-					},
+					range: sortRange(sheetId), // Y27:AE126 (기록한 곳 AE가 줄과 함께)
 					sortSpecs: [{
 						dimensionIndex: 24, // Y 컬럼 기준 정렬
 						sortOrder: 'ASCENDING'
