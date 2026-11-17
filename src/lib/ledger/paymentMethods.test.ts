@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
 	FULL_ACCOUNT_RANGE, FULL_LIST_RANGE, accountsUrl, monthAccountRange, monthListRange, paymentMethodsUrl,
-	pickListValues, pickPaymentMethods, withCurrentValue
+	listKey, pickListValues, pickPaymentMethods, withCurrentValue
 } from './paymentMethods';
 
 describe('결제방식 목록 다듬기', () => {
@@ -51,5 +51,15 @@ describe('계정 목록 (이달 쓸 계정)', () => {
 	it('목록 다듬기는 결제방식과 같은 함수', () => {
 		expect(pickListValues([['외식'], [''], [' 배달 ']])).toEqual(['외식', '배달']);
 		expect(pickPaymentMethods).toBe(pickListValues);
+	});
+});
+
+
+describe('목록을 읽은 열쇠', () => {
+	it('문서와 달 탭을 함께 본다: 해가 다르면 같은 5월이라도 다른 목록 (최종 검토)', () => {
+		expect(listKey('S2026', '5월')).not.toBe(listKey('S2025', '5월'));
+		expect(listKey('S2026', '5월')).not.toBe(listKey('S2026', '6월'));
+		expect(listKey('S2026', '5월')).toBe(listKey('S2026', '5월'));
+		expect(listKey(null, null)).toBe(listKey(undefined, undefined));
 	});
 });

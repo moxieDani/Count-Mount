@@ -51,3 +51,8 @@ export function accountsUrl(spreadsheetId: string, sheet: string | null | undefi
 	const base = `/api/sheets/${spreadsheetId}/accounts`;
 	return sheet ? `${base}?sheet=${encodeURIComponent(sheet)}` : base;
 }
+
+/** 목록을 읽은 열쇠: 문서와 달 탭을 함께 본다(해가 다르면 같은 '5월'이라도 다른 목록, 2026-11-18 최종 검토). */
+export function listKey(spreadsheetId: string | null | undefined, sheet: string | null | undefined): string {
+	return `${spreadsheetId ?? ''}|${sheet ?? ''}`;
+}
