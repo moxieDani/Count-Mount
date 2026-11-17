@@ -12,7 +12,8 @@ export const GET: RequestHandler = async ({ params, request, fetch }) => {
   const sheets = (info.sheets ?? []).map((s: { properties: { title: string } }) => s.properties.title as string);
   const months = Array.from({ length: 12 }, (_, i) => sheets.find((title: string) => new RegExp(`^0?${i + 1}월$`).test(title)) ?? null);
   const quote = (name: string) => `'${name.replace(/'/g, "''")}'`;
-  const ranges = ['계정!D41:D59', ...months.flatMap((name: string | null) => name ? [`${quote(name)}!Y26:AD126`, `${quote(name)}!A27:S61`] : [])];
+  // 분류 이름은 이름 붙인 범위 '계정항목'(비고정 30칸), 달마다 분류 표·예산은 A27:S81 (2026-11-17 재조정)
+  const ranges = ['계정항목', ...months.flatMap((name: string | null) => name ? [`${quote(name)}!Y26:AD126`, `${quote(name)}!A27:S81`] : [])];
   const query = new URLSearchParams();
   ranges.forEach(range => query.append('ranges', range));
   const response = await fetch(`${base}/values:batchGet?${query}`, { headers: { authorization } });
