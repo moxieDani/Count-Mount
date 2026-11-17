@@ -1,7 +1,7 @@
 /** 한 번 읽은 시트 값 → 해마다 설정 (설정 설계 4·7장). 순수 함수. */
 import {
-	ALERT_ROWS, BUDGET_ROWS, CARD_GROUPS, FIXED_ROWS, SECTIONS, TRANSFER_ROWS, TRANSFER_SECTIONS,
-	slotRow, type GroupKey, type SectionKey
+	ALERT_ROWS, BUDGET_ROWS, CARD_GROUPS, FIXED_ROWS, FORMULA_RANGES, SECTIONS, TRANSFER_ROWS, TRANSFER_SECTIONS,
+	cellKey, colName, parseRange, settingsRanges, slotRow, type GroupKey, type SectionKey
 } from './layout';
 
 export type Category = { section: SectionKey; row: number; group: string; name: string; stop: string | null };
@@ -19,6 +19,8 @@ export type LogEntry = { when: string; who: string; where: string; before: strin
 export type YearSettings = {
 	year: number; categories: Category[]; cards: Card[]; alerts: CardAlert[]; fixedRules: FixedRule[];
 	budgets: Budget[]; transfers: TransferSection[]; logs: LogEntry[];
+	/** 다른 칸을 따라가는 칸(시트 수식): cellKey → 수식 글. 화면은 잠그고, 새해에는 수식 그대로 옮긴다. */
+	formulas: Record<string, string>;
 };
 
 const EPOCH = Date.UTC(1899, 11, 30);
@@ -44,7 +46,20 @@ const rawCell = (v: unknown): RawCell => (isNumber(v) || typeof v === 'boolean' 
 /** 번호 칸: 숫자로 적힌 것은 정수 글로, 글은 그대로 */
 const digits = (v: unknown): string => (isNumber(v) ? String(Math.trunc(v)) : text(v));
 
-export function parseSettings(valueRanges: unknown[][][], year: number): YearSettings {
+/** 수식으로 읽은 범위(settingsRanges 앞 여섯) → 수식 칸 목록. */
+function formulasOf(formulaRanges: unknown[][][], year: number): Record<string, string> {
+	const out: Record<string, string> = {};
+	settingsRanges(year).slice(0, FORMULA_RANGES).forEach((range, k) => {
+		const at = parseRange(range)!;
+		(formulaRanges[k] ?? []).forEach((row, r) => (row ?? []).forEach((v, c) => {
+			if (typeof v === 'string' && v.startsWith('=')) out[cellKey(at.tab, colName(at.col + c), at.row + r)] = v;
+		}));
+	});
+	return out;
+}
+
+/** valueRanges: 값(UNFORMATTED) 읽기, formulaRanges: 같은 범위 앞 여섯의 수식(FORMULA) 읽기. */
+export function parseSettings(valueRanges: unknown[][][], year: number, formulaRanges: unknown[][][] = []): YearSettings {
 	const [account, cardRows, alertRows, fixedRows, budgetRows, transferRows, logRows] = valueRanges;
 
 	const categories: Category[] = SECTIONS.flatMap(sec =>
@@ -101,5 +116,5 @@ export function parseSettings(valueRanges: unknown[][][], year: number): YearSet
 		when: text(r[0]), who: text(r[1]), where: text(r[2]), before: text(r[3]), after: text(r[4])
 	}));
 
-	return { year, categories, cards, alerts, fixedRules, budgets, transfers, logs };
+	return { year, categories, cards, alerts, fixedRules, budgets, transfers, logs, formulas: formulasOf(formulaRanges, year) };
 }

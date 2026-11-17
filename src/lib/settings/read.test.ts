@@ -83,4 +83,12 @@ describe('설정 읽기', () => {
 		expect(serialToDate(46096)).toBe('2026-03-15');
 		expect(dateToSerial('2026-03-15')).toBe(46096);
 	});
+
+	it('다른 칸을 따라가는 칸(수식)은 자리와 수식을 적어 둔다', () => {
+		const formulas = ranges({ 4: rowsAt(1, { 49: ['=계정!D59', '', '=200000*2'] }), 5: rowsAt(1, { 23: ['', '=SUM(B2:B21)'], 41: ['', '=B74'] }) }).slice(0, 6);
+		expect(parseSettings(ranges(), 2026, formulas).formulas).toEqual({
+			'2026년 예산!D49': '=계정!D59', '2026년 예산!F49': '=200000*2', '자동이체 내역!B23': '=SUM(B2:B21)', '자동이체 내역!B41': '=B74'
+		});
+		expect(parseSettings(ranges(), 2026).formulas).toEqual({});
+	});
 });

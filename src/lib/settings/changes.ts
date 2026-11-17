@@ -6,13 +6,16 @@
  */
 import {
 	ACCOUNT_TAB, ALERT_ROWS, AUTO_TAB, CARD_GROUPS, FIXED_ROWS, SECTIONS, TRANSFER_ROWS, TRANSFER_TAB,
-	budgetTab, type GroupKey, type SectionKey
+	budgetTab, cellKey, colName, type GroupKey, type SectionKey
 } from './layout';
 import { dateToSerial, serialToDate, type CardAlert, type YearSettings } from './read';
 
 export type Cell = string | number | boolean;
-/** dates: 날짜 일련번호가 든 열 자리(미리 보기·설정 기록에 날짜로 보인다). */
-export type CellWrite = { range: string; before: Cell[][]; after: Cell[][]; label: string; dates?: number[] };
+/**
+ * dates: 날짜 일련번호가 든 열 자리(미리 보기·설정 기록에 날짜로 보인다).
+ * formula: after가 수식 글이라 시트가 수식으로 읽게 쓴다(새해 만들기만 쓴다. 설정 저장은 늘 값 그대로).
+ */
+export type CellWrite = { range: string; before: Cell[][]; after: Cell[][]; label: string; dates?: number[]; formula?: boolean };
 export type Result = CellWrite[] | { error: string };
 export type CardFields = {
 	name?: string; settle?: string; perf?: string; account?: string;
@@ -20,6 +23,19 @@ export type CardFields = {
 };
 
 const FULL = '자리가 다 찼습니다';
+export const LOCKED = '시트에서 고치는 칸입니다(다른 칸을 따라갑니다). 시트에서 고쳐 주세요.';
+export const LOCKED_ROW = '이 줄에는 시트에서 고치는 칸이 있어 여기서 지울 수 없습니다. 시트에서 지워 주세요.';
+
+/** 다른 칸을 따라가는 칸(시트 수식)인가: 화면은 잠그고, 바꾸려 하면 오류. */
+export const locked = (s: YearSettings, tab: string, col: string, row: number) => cellKey(tab, col, row) in (s.formulas ?? {});
+const lockedCols = (s: YearSettings, row: number) =>
+	Array.from({ length: 10 }, (_, i) => i).filter(i => locked(s, TRANSFER_TAB, colName(i), row));
+
+const cellText = (v: unknown) => (v === undefined || v === null ? '' : String(v).trim());
+/** 바뀐 칸이 하나도 없는 쓰기는 뺀다 (글자로 견준다: 서버의 저장 전 확인과 같다). */
+export function changedOnly(writes: CellWrite[]): CellWrite[] {
+	return writes.filter(w => w.after.some((row, r) => row.some((v, c) => cellText(v) !== cellText(w.before[r]?.[c]))));
+}
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const auto = (cells: string) => `'${AUTO_TAB}'!${cells}`;
 const transfer = (cells: string) => `'${TRANSFER_TAB}'!${cells}`;
@@ -154,6 +170,7 @@ export function setBudgets(s: YearSettings, drafts: Record<number, string>): Res
 export function setBudget(s: YearSettings, row: number, amount: number | null): Result {
 	const b = s.budgets.find(x => x.row === row);
 	if (!b) return { error: '예산 줄이 없습니다' };
+	if (locked(s, budgetTab(s.year), 'F', row)) return { error: LOCKED };
 	return [{ range: `'${budgetTab(s.year)}'!F${row}`, before: [[b.amount ?? '']], after: [[amount ?? '']], label: `예산 · ${b.label}` }];
 }
 
@@ -194,6 +211,7 @@ export function setTransferRow(s: YearSettings, sectionName: string, row: number
 	const target = row ?? freeRow(sec.rows.map(r => r.row), sec.start + 1, sec.start + TRANSFER_ROWS);
 	if (target === null) return { error: FULL };
 	const cur = sec.rows.find(r => r.row === target);
+	if (lockedCols(s, target).some(i => cellText(cells[i]) !== cellText(cur?.raw[i]))) return { error: LOCKED };
 	const after = transferCells(cells, cur?.raw);
 	return [{ range: transfer(`A${target}:J${target}`), before: [cur ? cur.raw : blanks(10)], after: [after],
 		label: `자동이체 내역 · ${sec.name} · ${after[0] || `${target}줄`}` }];
@@ -203,6 +221,7 @@ export function clearTransferRow(s: YearSettings, sectionName: string, row: numb
 	const sec = section(s, sectionName);
 	const cur = sec?.rows.find(r => r.row === row);
 	if (!sec || !cur) return { error: '자동이체 줄이 없습니다' };
+	if (lockedCols(s, row).length) return { error: LOCKED_ROW };
 	return [{ range: transfer(`A${row}:J${row}`), before: [cur.raw], after: [blanks(10)],
 		label: `자동이체 내역 · ${sec.name} · ${cur.cells[0] || `${row}줄`} · 지움` }];
 }
@@ -211,6 +230,7 @@ export function setTransferIncome(s: YearSettings, sectionName: string, amount: 
 	const sec = section(s, sectionName);
 	if (!sec) return { error: '구역이 없습니다' };
 	const row = sec.start + 21;
+	if (locked(s, TRANSFER_TAB, 'B', row)) return { error: LOCKED };
 	return [{ range: transfer(`B${row}`), before: [[sec.income ?? '']], after: [[amount ?? '']], label: `자동이체 내역 · ${sec.name} · 월 수입` }];
 }
 
@@ -218,6 +238,7 @@ export function setTransferMemo(s: YearSettings, sectionName: string, memo: stri
 	const sec = section(s, sectionName);
 	if (!sec) return { error: '구역이 없습니다' };
 	const row = sec.start + 24;
+	if (locked(s, TRANSFER_TAB, 'B', row)) return { error: LOCKED };
 	return [{ range: transfer(`B${row}`), before: [[sec.memo]], after: [[memo]], label: `자동이체 내역 · ${sec.name} · 메모` }];
 }
 

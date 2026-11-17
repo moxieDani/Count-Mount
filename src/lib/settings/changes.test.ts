@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { parseSettings } from './read';
 import {
-	addCard, addCategory, clearCardAlert, describe as describeWrites, parseAmount, setBudget, setBudgets, setCardAlert, setStopDate,
-	setTransferRow, updateCard, validateName
+	LOCKED, LOCKED_ROW, addCard, addCategory, changedOnly, clearCardAlert, clearTransferRow, describe as describeWrites, locked, parseAmount,
+	setBudget, setBudgets, setCardAlert, setStopDate, setTransferIncome, setTransferMemo, setTransferRow, updateCard, validateName
 } from './changes';
 
 function rowsAt(first: number, entries: Record<number, unknown[]>): unknown[][] {
@@ -128,3 +128,41 @@ describe('바꾸기 계산', () => {
 		expect(Array.isArray(t) && t[0].after).toEqual([['1. 용돈(고침)', ...raw.slice(1)]]);
 	});
 });
+
+/** 서은 2줄 금액(B2)이 다른 칸을 따라가고, 예산 49줄과 서은 월 수입(B22)은 수식 */
+function lockedSettings() {
+	return parseSettings([
+		rowsAt(4, { 59: ['식비', '외식'] }), [], [], [],
+		rowsAt(1, { 49: ['', '', 400000] }),
+		rowsAt(1, { 1: ['* 서은'], 2: ['1. 용돈', 100000, '', '', '', '', '', '', '', '메모'], 3: ['2. 통신', 50000], 22: ['', 3000000] }),
+		[]
+	], 2026, [[], [], [], [], rowsAt(1, { 49: ['', '', '=200000*2'] }), rowsAt(1, { 2: ['', '=B74'], 22: ['', '=1000000*3'] })]);
+}
+
+describe('다른 칸을 따라가는 칸', () => {
+	it('화면에서 고칠 수 없다', () => {
+		const s = lockedSettings();
+		expect(locked(s, '자동이체 내역', 'B', 2)).toBe(true);
+		expect(locked(s, '자동이체 내역', 'C', 2)).toBe(false);
+		expect(setBudget(s, 49, 500000)).toEqual({ error: LOCKED });
+		expect(setBudgets(s, { 49: '500000' })).toEqual({ error: LOCKED });
+		expect(setTransferIncome(s, '서은', 4000000)).toEqual({ error: LOCKED });
+		expect(setTransferRow(s, '서은', 2, ['1. 용돈', '200000', '', '', '', '', '', '', '', '메모'])).toEqual({ error: LOCKED });
+		expect(clearTransferRow(s, '서은', 2)).toEqual({ error: LOCKED_ROW });
+	});
+
+	it('같은 줄의 다른 칸은 고칠 수 있고, 따라가는 칸은 읽은 값 그대로', () => {
+		const s = lockedSettings();
+		const w = setTransferRow(s, '서은', 2, ['1. 용돈', '100000', '', '', '', '', '', '', '', '새 메모']);
+		expect(Array.isArray(w) && w[0].after[0]).toEqual(['1. 용돈', 100000, '', '', '', '', '', '', '', '새 메모']);
+		expect(Array.isArray(clearTransferRow(s, '서은', 3))).toBe(true);
+		expect(Array.isArray(setTransferMemo(s, '서은', '새 메모'))).toBe(true);
+	});
+
+	it('바뀐 칸이 없는 쓰기는 뺀다 (카드 해지만 바꾸면 상태·날짜 한 줄)', () => {
+		const w = updateCard(settings(), 1, { status: '해지', cancel: '2026-11-18' });
+		expect(Array.isArray(w) && changedOnly(w).map(x => x.label)).toEqual(['카드 · 기순 · 기순_롯데 · 상태·날짜']);
+		expect(changedOnly([{ range: '계정!G4:H4', before: [[1000, '']], after: [['1000', ' ']], label: 'x' }])).toEqual([]);
+	});
+});
+

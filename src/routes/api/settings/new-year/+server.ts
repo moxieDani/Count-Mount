@@ -2,7 +2,7 @@ import { json } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
 import type { RequestHandler } from './$types';
 import { findExactSpreadsheet, householdDocName, kstNow } from '$lib/server/householdDoc';
-import { ACCOUNT_TAB, LOG_TAB, settingsRanges } from '$lib/settings/layout';
+import { ACCOUNT_TAB, FORMULA_RANGES, LOG_TAB, settingsRanges } from '$lib/settings/layout';
 import { planNewYear } from '$lib/settings/newYear';
 import { parseSettings } from '$lib/settings/read';
 
@@ -97,16 +97,24 @@ export const POST: RequestHandler = async ({ request }) => {
 			method: 'PUT', headers: { authorization, 'Content-Type': 'application/json' }, body: JSON.stringify({ values: [[year]] })
 		}));
 
-		// 5. 지난해 설정을 읽어 정리해 옮겨 적는다
-		const query = new URLSearchParams({ valueRenderOption: 'UNFORMATTED_VALUE' });
-		settingsRanges(year - 1).forEach(r => query.append('ranges', r));
-		const read = await must('read', await fetch(`${SHEETS}/${encodeURIComponent(last.file.id)}/values:batchGet?${query}`, { headers: { authorization } }));
-		const values = ((await read.json()).valueRanges ?? []).map((v: { values?: unknown[][] }) => v.values ?? []);
-		const writes = planNewYear(parseSettings(values, year - 1), year);
-		await must('write', await fetch(`${SHEETS}/${id}/values:batchUpdate`, {
+		// 5. 지난해 설정(값, 그리고 다른 칸을 따라가는 칸의 수식)을 읽어 정리해 옮겨 적는다
+		const lastRanges = settingsRanges(year - 1);
+		const readOf = (ranges: string[], render: string) => {
+			const query = new URLSearchParams({ valueRenderOption: render });
+			ranges.forEach(r => query.append('ranges', r));
+			return fetch(`${SHEETS}/${encodeURIComponent(last.file!.id)}/values:batchGet?${query}`, { headers: { authorization } });
+		};
+		const [read, formulaRead] = await Promise.all([readOf(lastRanges, 'UNFORMATTED_VALUE'), readOf(lastRanges.slice(0, FORMULA_RANGES), 'FORMULA')]);
+		const valuesOf = async (res: Response) =>
+			((await (await must('read', res)).json()).valueRanges ?? []).map((v: { values?: unknown[][] }) => v.values ?? []);
+		const writes = planNewYear(parseSettings(await valuesOf(read), year - 1, await valuesOf(formulaRead)), year);
+		const put = (input: 'RAW' | 'USER_ENTERED', list: typeof writes) => fetch(`${SHEETS}/${id}/values:batchUpdate`, {
 			method: 'POST', headers: { authorization, 'Content-Type': 'application/json' },
-			body: JSON.stringify({ valueInputOption: 'RAW', data: writes.map(w => ({ range: w.range, values: w.after })) })
-		}));
+			body: JSON.stringify({ valueInputOption: input, data: list.map(w => ({ range: w.range, values: w.after })) })
+		});
+		await must('write', await put('RAW', writes.filter(w => !w.formula)));
+		const formulas = writes.filter(w => w.formula);   // 값을 쓴 뒤 수식으로 덧쓴다(실패해도 값은 남는다)
+		if (formulas.length) await must('write', await put('USER_ENTERED', formulas));
 
 		const row = [kstNow(), await who(authorization), '지난해 설정을 가져옴', lastName, name];
 		const log = await fetch(

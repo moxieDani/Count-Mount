@@ -1,11 +1,13 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
-	import { CARD_COMPANIES, CARD_GROUPS, CARD_STATUSES, SECTIONS, type GroupKey, type SectionKey } from '$lib/settings/layout';
+	import {
+		CARD_COMPANIES, CARD_GROUPS, CARD_STATUSES, SECTIONS, TRANSFER_TAB, budgetTab, colName, type GroupKey, type SectionKey
+	} from '$lib/settings/layout';
 	import type { Card, CardAlert, YearSettings } from '$lib/settings/read';
 	import {
-		addCard, addCategory, amountText, clearCardAlert, clearFixedRule, clearTransferRow, describe, parseAmount, setBudgets, setCardAlert,
-		setFixedRule, setStopDate, setTransferIncome, setTransferMemo, setTransferRow, updateCard,
+		addCard, addCategory, amountText, changedOnly, clearCardAlert, clearFixedRule, clearTransferRow, describe, locked, parseAmount,
+		setBudgets, setCardAlert, setFixedRule, setStopDate, setTransferIncome, setTransferMemo, setTransferRow, updateCard,
 		type CellWrite, type Result
 	} from '$lib/settings/changes';
 
@@ -27,6 +29,9 @@
 	let open = $state<Record<string, boolean>>({ categories: true });
 
 	const spreadsheetId = $derived(years.find(y => y.year === year)?.spreadsheetId ?? null);
+	/** 다른 칸을 따라가는 칸(시트 수식): 화면에서는 잠근다 */
+	const isLocked = (tab: string, col: string, row: number | null) => !!settings && row !== null && locked(settings, tab, col, row);
+	const LOCK_TITLE = '다른 칸을 따라가는 칸이라 시트에서 고칩니다';
 
 	let latest = 0;
 	async function loadYears() {
@@ -121,11 +126,12 @@
 			notice = result.error;
 			return;
 		}
-		if (result.length === 0) {
+		const writes = changedOnly(result);   // 바뀐 칸이 없는 쓰기(예: 카드 상태만 바꿀 때 정산·실적·계좌)는 빼고 묻는다
+		if (writes.length === 0) {
 			notice = '바뀐 것이 없습니다.';
 			return;
 		}
-		pending = { writes: result, lines: describe(result) };
+		pending = { writes, lines: describe(writes) };
 	}
 
 	async function confirmSave() {
@@ -144,7 +150,8 @@
 				return;
 			}
 			if (!res.ok) throw new Error(data.error);
-			notice = data.logged === false ? '저장했습니다. (설정 기록은 남기지 못했습니다)' : '저장했습니다.';
+			notice = data.unchanged ? '바뀐 것이 없어 저장하지 않았습니다.'
+				: data.logged === false ? '저장했습니다. (설정 기록은 남기지 못했습니다)' : '저장했습니다.';
 			await loadSettings(true);
 		} catch (e) {
 			notice = e instanceof Error ? e.message : '저장하지 못했습니다.';
@@ -400,7 +407,11 @@
 			{#if open.budgets}
 				<ul class="rows">
 					{#each settings.budgets as b (b.row)}
-						<li class="row"><span class="name">{b.label}</span><input class="amount" inputmode="numeric" bind:value={budgetDraft[b.row]} /></li>
+						{@const fixed = isLocked(budgetTab(settings.year), 'F', b.row)}
+						<li class="row">
+							<span class="name">{b.label}{#if fixed} <small class="lock">시트에서 고침</small>{/if}</span>
+							<input class="amount" inputmode="numeric" bind:value={budgetDraft[b.row]} disabled={fixed} title={fixed ? LOCK_TITLE : undefined} />
+						</li>
 					{/each}
 				</ul>
 				<button class="btn" onclick={submitBudgets}>저장</button>
@@ -418,22 +429,30 @@
 							<details class="card">
 								<summary>{item.row === null ? '새 줄 더하기' : transferDraft[item.key][0] || `${item.row}줄`}</summary>
 								<div class="grid">
-									{#each TRANSFER_HEADS as head, i}<label>{head} <input bind:value={transferDraft[item.key][i]} /></label>{/each}
+									{#each TRANSFER_HEADS as head, i}
+										{@const fixed = isLocked(TRANSFER_TAB, colName(i), item.row)}
+										<label>{head}{#if fixed} <small class="lock">시트에서 고침</small>{/if}
+											<input bind:value={transferDraft[item.key][i]} disabled={fixed} title={fixed ? LOCK_TITLE : undefined} /></label>
+									{/each}
 								</div>
 								<button class="btn small" onclick={() => settings && propose(setTransferRow(settings, t.name, item.row, transferDraft[item.key]))}>{item.row === null ? '더하기' : '고치기'}</button>
-								{#if item.row !== null}
+								{#if item.row !== null && TRANSFER_HEADS.some((_, i) => isLocked(TRANSFER_TAB, colName(i), item.row))}
+									<small class="lock">시트에서 고치는 칸이 있어 이 줄은 시트에서 지웁니다</small>
+								{:else if item.row !== null}
 									<button class="btn small danger" onclick={() => settings && item.row !== null && propose(clearTransferRow(settings, t.name, item.row))}>지우기</button>
 								{/if}
 							</details>
 						{/if}
 					{/each}
+					{@const incomeFixed = isLocked(TRANSFER_TAB, 'B', t.start + 21)}
+					{@const memoFixed = isLocked(TRANSFER_TAB, 'B', t.start + 24)}
 					<div class="form">
-						<label>월 수입 <input inputmode="numeric" bind:value={incomeDraft[t.name]} /></label>
-						<button class="btn small" onclick={() => submitIncome(t.name)}>적기</button>
+						<label>월 수입 <input inputmode="numeric" bind:value={incomeDraft[t.name]} disabled={incomeFixed} title={incomeFixed ? LOCK_TITLE : undefined} /></label>
+						{#if incomeFixed}<small class="lock">시트에서 고침</small>{:else}<button class="btn small" onclick={() => submitIncome(t.name)}>적기</button>{/if}
 					</div>
 					<div class="form">
-						<label>메모 <input bind:value={memoDraft[t.name]} /></label>
-						<button class="btn small" onclick={() => settings && propose(setTransferMemo(settings, t.name, memoDraft[t.name]))}>적기</button>
+						<label>메모 <input bind:value={memoDraft[t.name]} disabled={memoFixed} title={memoFixed ? LOCK_TITLE : undefined} /></label>
+						{#if memoFixed}<small class="lock">시트에서 고침</small>{:else}<button class="btn small" onclick={() => settings && propose(setTransferMemo(settings, t.name, memoDraft[t.name]))}>적기</button>{/if}
 					</div>
 				{/each}
 			{/if}
@@ -531,6 +550,8 @@
 	.alerts { margin-top: 6px; }
 	input, select { padding: 6px 8px; border: 1px solid #d6dde8; border-radius: 8px; font-size: 0.9rem; min-width: 0; }
 	.amount { width: 140px; text-align: right; }
+	.lock { color: #78859a; font-weight: 500; font-size: 0.75rem; }
+	input:disabled { background: #f4f6fa; color: #5a6578; }
 	.btn { border: 1px solid #d6dde8; background: white; border-radius: 8px; padding: 6px 12px; cursor: pointer; }
 	.btn.small { padding: 4px 8px; font-size: 0.85rem; }
 	.btn.primary { background: #315fda; color: white; border-color: #315fda; }

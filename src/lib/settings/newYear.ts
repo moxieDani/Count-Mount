@@ -3,11 +3,13 @@
  * 빼는 것: 그만 쓴 날이 새해 1월 1일 전인 분류, 끝 날짜(해지면 해지일, 아니면 만료일)가 그 전인 카드와 그 알림 줄,
  * 뺀 분류의 고정비 줄. 남은 분류는 구간마다, 카드는 묶음마다 앞자리부터(구분선 자리 14·28은 '------').
  * 예산은 남은 분류 이름으로 따라가고, 자동이체 내역(월 수입·메모 포함)은 그대로. before는 빈 틀(빈칸).
+ * 다른 칸을 따라가는 칸(수식)은 값으로 한 번 쓴 뒤 수식 그대로 덧쓴다(formula 쓰기, 맨 뒤에): 자동이체는 자리가 그대로라
+ * 언제나, 예산은 분류 자리가 당겨지지 않았을 때만(당겨지면 가리키는 칸이 어긋날 수 있어 값만 옮긴다).
  */
 import { type Cell, type CellWrite, transferCells } from './changes';
 import {
 	ACCOUNT_TAB, ALERT_ROWS, AUTO_TAB, BUDGET_ROWS, CARD_GROUPS, FIXED_ROWS, SECTIONS, SEPARATOR, SEPARATOR_SLOTS,
-	TRANSFER_ROWS, TRANSFER_TAB, budgetTab
+	TRANSFER_ROWS, TRANSFER_TAB, budgetTab, cellKey, colName
 } from './layout';
 import { dateToSerial, type Card, type Category, type YearSettings } from './read';
 
@@ -26,6 +28,11 @@ const cardEnd = (c: Card) => (c.status === '해지' && c.cancel ? c.cancel : c.e
 export function planNewYear(last: YearSettings, year: number): CellWrite[] {
 	const cutoff = `${year}-01-01`;
 	const out: CellWrite[] = [];
+	const formulas: CellWrite[] = [];
+	const follow = (fromTab: string, toTab: string, col: string, fromRow: number, toRow: number = fromRow) => {
+		const f = last.formulas?.[cellKey(fromTab, col, fromRow)];
+		if (f) formulas.push({ ...write(`'${toTab}'!${col}${toRow}`, [[f]], `새해 · 따라가는 칸 · ${toTab}!${col}${toRow}`), formula: true });
+	};
 
 	// 분류: 구간마다 남은 분류를 앞자리부터
 	const kept: Record<string, Category[]> = {};
@@ -71,6 +78,9 @@ export function planNewYear(last: YearSettings, year: number): CellWrite[] {
 	for (const part of BUDGET_ROWS) {
 		const sec = SECTIONS.find(s => s.first === part.accountFirst)!;
 		const rows = kept[sec.key].map(c => [amountOf.get(c.row) ?? ''] as Cell[]);
+		kept[sec.key].forEach((c, i) => {
+			if (c.row - part.accountFirst === i) follow(budgetTab(last.year), budgetTab(year), 'F', part.budgetFirst + i);
+		});
 		out.push(write(`'${budgetTab(year)}'!F${part.budgetFirst}:F${part.budgetFirst + part.size - 1}`, pad(rows, part.size, 1), `새해 · 예산 · ${sec.name}`));
 	}
 
@@ -81,6 +91,11 @@ export function planNewYear(last: YearSettings, year: number): CellWrite[] {
 		out.push(write(`'${TRANSFER_TAB}'!A${t.start + 1}:J${t.start + TRANSFER_ROWS}`, rows, `새해 · 자동이체 내역 · ${t.name}`));
 		if (t.income !== null) out.push(write(`'${TRANSFER_TAB}'!B${t.start + 21}`, [[t.income]], `새해 · 자동이체 내역 · ${t.name} · 월 수입`));
 		if (t.memo) out.push(write(`'${TRANSFER_TAB}'!B${t.start + 24}`, [[t.memo]], `새해 · 자동이체 내역 · ${t.name} · 메모`));
+		for (let row = t.start + 1; row <= t.start + TRANSFER_ROWS; row++) {
+			for (let c = 0; c < 10; c++) follow(TRANSFER_TAB, TRANSFER_TAB, colName(c), row);
+		}
+		follow(TRANSFER_TAB, TRANSFER_TAB, 'B', t.start + 21);
+		follow(TRANSFER_TAB, TRANSFER_TAB, 'B', t.start + 24);
 	}
-	return out;
+	return [...out, ...formulas];
 }

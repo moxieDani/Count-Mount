@@ -52,6 +52,25 @@ export const BUDGET_ROWS: { budgetFirst: number; accountFirst: number; size: num
 	{ budgetFirst: 81, accountFirst: 14, size: 20 }    // 비소비
 ];
 
+/** 열 번호(0부터) → 열 글자 (0 → A, 26 → AA) */
+export const colName = (i: number): string =>
+	(i >= 26 ? colName(Math.floor(i / 26) - 1) : '') + String.fromCharCode(65 + (i % 26));
+const colIndex = (letters: string) => [...letters].reduce((n, ch) => n * 26 + ch.charCodeAt(0) - 64, 0) - 1;
+
+/** 범위 글('탭'!C4:E88, 계정!F4) → 탭 글(따옴표 그대로)·탭 이름·첫 칸(열 번호 0부터, 줄). 모양이 아니면 null */
+export function parseRange(range: string): { tabPart: string; tab: string; col: number; row: number } | null {
+	const m = /^(.+)!([A-Z]+)(\d+)(?::[A-Z]+\d*)?$/.exec(range);
+	if (!m) return null;
+	const tab = /^'.*'$/.test(m[1]) ? m[1].slice(1, -1).replaceAll("''", "'") : m[1];
+	return { tabPart: m[1], tab, col: colIndex(m[2]), row: Number(m[3]) };
+}
+
+/** 칸 이름표 (다른 칸을 따라가는 칸 목록의 열쇠): '자동이체 내역!B41' */
+export const cellKey = (tab: string, col: string, row: number) => `${tab}!${col}${row}`;
+
+/** 수식을 읽는 범위 수: settingsRanges 앞의 여섯(설정 기록은 빼고) */
+export const FORMULA_RANGES = 6;
+
 /** 한 번의 batchGet에 넣을 범위 (parseSettings가 이 차례로 받는다). */
 export function settingsRanges(year: number): string[] {
 	return [

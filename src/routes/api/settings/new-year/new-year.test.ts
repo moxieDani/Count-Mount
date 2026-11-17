@@ -7,7 +7,7 @@ const { POST } = await import('./+server');
 
 type Step = { kind: string; url: URL; body: any };
 
-function stubGoogle(opts: { files: Record<string, { id: string; name: string; parents?: string[] }[]>; fail?: string }) {
+function stubGoogle(opts: { files: Record<string, { id: string; name: string; parents?: string[] }[]>; fail?: string; formulas?: unknown[][][] }) {
 	const steps: Step[] = [];
 	vi.stubGlobal('fetch', async (input: string, init?: RequestInit) => {
 		const url = new URL(input);
@@ -34,7 +34,9 @@ function stubGoogle(opts: { files: Record<string, { id: string; name: string; pa
 			case 'meta': return Response.json({ sheets: [
 				{ properties: { title: '계정', sheetId: 1 } }, { properties: { title: 'YYYY년 예산', sheetId: 2 } },
 				{ properties: { title: 'YYYY년 연간 지출', sheetId: 3 } }] });
-			case 'read': return Response.json({ valueRanges: [] });
+			case 'read': return Response.json({   // 수식 읽기면 따라가는 칸 자리
+				valueRanges: url.searchParams.get('valueRenderOption') === 'FORMULA' ? (opts.formulas ?? []).map(values => ({ values })) : []
+			});
 			case 'who': return Response.json({ name: '권기순' });
 			default: return Response.json({});
 		}
@@ -75,7 +77,7 @@ describe('POST /api/settings/new-year', () => {
 		const res = await call(2027);
 		expect(await res.json()).toEqual({ ok: true, spreadsheetId: 'NEW', url: 'https://docs.google.com/spreadsheets/d/NEW' });
 		const order = steps.map(s => s.kind).filter(k => !['find', 'who'].includes(k));
-		expect(order).toEqual(['copy', 'meta', 'rename', 'year', 'read', 'write', 'log']);
+		expect(order).toEqual(['copy', 'meta', 'rename', 'year', 'read', 'read', 'write', 'log']);
 		const copy = steps.find(s => s.kind === 'copy')!;
 		expect(copy.url.pathname).toContain('/files/TPL/copy');
 		expect(copy.body).toEqual({ name: '2027 가계부', parents: ['DIR'] });   // 지난해 문서와 같은 폴더
@@ -89,6 +91,17 @@ describe('POST /api/settings/new-year', () => {
 		expect(write.url.pathname).toContain('/NEW/');
 		expect(write.body.valueInputOption).toBe('RAW');
 		expect(steps.find(s => s.kind === 'log')!.body.values[0][2]).toBe('지난해 설정을 가져옴');
+	});
+
+	it('다른 칸을 따라가는 칸은 값을 쓴 뒤 수식으로 덧쓴다', async () => {
+		const steps = stubGoogle({ files: READY, formulas: [[], [], [], [], [], [[], ['', '=B74']]] });
+		expect((await (await call(2027)).json()).ok).toBe(true);
+		const reads = steps.filter(s => s.kind === 'read');
+		expect(reads.map(r => r.url.searchParams.get('valueRenderOption'))).toEqual(['UNFORMATTED_VALUE', 'FORMULA']);
+		const writes = steps.filter(s => s.kind === 'write');
+		expect(writes.map(w => w.body.valueInputOption)).toEqual(['RAW', 'USER_ENTERED']);
+		expect(writes[1].body.data).toEqual([{ range: "'자동이체 내역'!B2", values: [['=B74']] }]);
+		expect(writes[0].body.data.some((d: { values: unknown[][] }) => d.values.flat().includes('=B74'))).toBe(false);
 	});
 
 	it('중간 실패는 단계와 문서 링크를 알림', async () => {

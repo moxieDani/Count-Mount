@@ -12,7 +12,7 @@ const d = (s: string) => dateToSerial(s);
 
 /** 2026 설정: 비고정 59 외식, 60 옛분류(2026-11 그만), 61 카페(2027-03 그만), 고정 34 관리비, 35 옛관리(2026-05 그만)
  *  카드 1 기순A(사용 중), 2 기순B(2026-06 해지), 3 기순C(만료 2027-02), 15 서은A, 29 현금 */
-const last = parseSettings([
+const VALUES: unknown[][][] = [
 	rowsAt(4, {
 		34: ['주거', '관리비'], 35: ['주거', '옛관리', d('2026-05-01')],
 		59: ['식비', '외식'], 60: ['식비', '옛분류', d('2026-11-30')], 61: ['식비', '카페', d('2027-03-15')]
@@ -28,7 +28,8 @@ const last = parseSettings([
 	rowsAt(1, { 22: ['', '', 250000], 23: ['', '', 10000], 49: ['', '', 400000], 50: ['', '', 5000], 51: ['', '', 60000] }),
 	rowsAt(1, { 1: ['* 서은'], 2: ['1. 용돈', 100000], 22: ['월 수입', 3000000], 25: ['메모', '메모글'], 27: ['* 기순'], 53: ['* 생활비 통장'] }),
 	[]
-], 2026);
+];
+const last = parseSettings(VALUES, 2026);
 
 const at = (writes: ReturnType<typeof planNewYear>, range: string) => writes.find(w => w.range === range)?.after;
 
@@ -88,4 +89,19 @@ describe('새해 설정 가져오기', () => {
 		const s = parseSettings([[], [], [], [], [], rowsAt(1, { 1: ['* 서은'], 2: raw }), []], 2026);
 		expect(at(planNewYear(s, 2027), "'자동이체 내역'!A2:J21")![0]).toEqual(raw);
 	});
+
+	it('다른 칸을 따라가는 칸은 따라가는 그대로 옮긴다 (예산은 자리가 그대로일 때만)', () => {
+		// 예산 49(외식, 자리 그대로)·51(카페, 옛분류가 빠져 50으로 당겨짐), 서은 2줄 금액·월 수입·합계
+		const withF = parseSettings(VALUES, 2026, [[], [], [], [],
+			rowsAt(1, { 49: ['', '', '=200000*2'], 51: ['', '', '=30000*2'] }),
+			rowsAt(1, { 2: ['', '=B74'], 22: ['', '=1000000*3'], 23: ['', '=SUM(B2:B21)'] })]);
+		const formulas = planNewYear(withF, 2027).filter(w => w.formula);
+		expect(formulas.map(w => [w.range, w.after])).toEqual([
+			["'2027년 예산'!F49", [['=200000*2']]],
+			["'자동이체 내역'!B2", [['=B74']]],
+			["'자동이체 내역'!B22", [['=1000000*3']]]
+		]);
+		expect(planNewYear(last, 2027).some(w => w.formula)).toBe(false);
+	});
 });
+
