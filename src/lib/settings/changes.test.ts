@@ -82,8 +82,9 @@ describe('바꾸기 계산', () => {
 	it('그만 쓴 날·예산·자동이체 줄', () => {
 		expect(setStopDate(settings(), 59, null)).toEqual([{ range: '계정!E59', before: [[46096]], after: [['']], label: '지출 분류 · 외식 · 그만 쓴 날' }]);
 		expect(setBudget(settings(), 49, 450000)).toEqual([{ range: "'2026년 예산'!F49", before: [[400000]], after: [[450000]], label: '예산 · 외식' }]);
-		const t = setTransferRow(settings(), '서은', null, ['2. 청약', '20000']);
-		expect(Array.isArray(t) && t[0]).toMatchObject({ range: "'자동이체 내역'!A3:J3", after: [['2. 청약', '20000', '', '', '', '', '', '', '', '']] });
+		const t = setTransferRow(settings(), '서은', null, ['2. 청약', '20,000원', '18000', '신한 -> 국민 2만원']);
+		// 금액·변경 금액은 숫자로 써야 시트 합계 수식이 더한다 (글자 '20000'은 SUM이 건너뜀)
+		expect(Array.isArray(t) && t[0]).toMatchObject({ range: "'자동이체 내역'!A3:J3", after: [['2. 청약', 20000, 18000, '신한 -> 국민 2만원', '', '', '', '', '', '']] });
 	});
 
 	it('미리 보기 글', () => {

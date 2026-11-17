@@ -139,6 +139,18 @@ export function setBudget(s: YearSettings, row: number, amount: number | null): 
 	return [{ range: `'${budgetTab(s.year)}'!F${row}`, before: [[b.amount ?? '']], after: [[amount ?? '']], label: `예산 · ${b.label}` }];
 }
 
+/** 자동이체 줄 열 칸(A~J). 금액(B)·변경 금액(C)은 숫자로 써야 시트 합계 수식이 더한다('20,000원' → 20000). */
+export function transferCells(cells: (string | number)[]): Cell[] {
+	return Array.from({ length: 10 }, (_, i) => {
+		const v = cells[i] ?? '';
+		if ((i === 1 || i === 2) && typeof v === 'string') {
+			const digits = v.replace(/[,\s원]/g, '');
+			if (/^-?\d+$/.test(digits)) return Number(digits);
+		}
+		return v;
+	});
+}
+
 function section(s: YearSettings, name: string) {
 	return s.transfers.find(t => t.name === name);
 }
@@ -149,7 +161,7 @@ export function setTransferRow(s: YearSettings, sectionName: string, row: number
 	const target = row ?? freeRow(sec.rows.map(r => r.row), sec.start + 1, sec.start + TRANSFER_ROWS);
 	if (target === null) return { error: FULL };
 	const cur = sec.rows.find(r => r.row === target);
-	const after = Array.from({ length: 10 }, (_, i) => cells[i] ?? '');
+	const after = transferCells(cells);
 	return [{ range: transfer(`A${target}:J${target}`), before: [cur ? cur.cells : blanks(10)], after: [after],
 		label: `자동이체 내역 · ${sec.name} · ${after[0] || `${target}줄`}` }];
 }

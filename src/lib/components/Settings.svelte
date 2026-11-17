@@ -66,6 +66,46 @@
 		}
 	}
 
+	// 새해 가계부: 가장 늦은 해의 다음 해가 내년까지이면 만들 수 있다 (설정 설계 8장)
+	const STEP_TEXT: Record<string, string> = { tabs: '탭 이름 바꾸기', year: '연도 적기', read: '지난해 설정 읽기', write: '설정 옮겨 적기' };
+	const nextYear = $derived.by(() => {
+		const last = years.at(-1)?.year;
+		return last !== undefined && last + 1 <= new Date().getFullYear() + 1 ? last + 1 : null;
+	});
+	let creating = $state(false);
+	let created = $state<{ text: string; url: string } | null>(null);
+
+	async function createYear() {
+		const target = nextYear;
+		if (target === null || creating) return;
+		if (!confirm(`${target} 가계부를 새로 만들까요?\n빈 틀을 복사하고 ${target - 1}년 설정(분류·카드·예산·자동이체)을 정리해 가져옵니다.`)) return;
+		creating = true;
+		created = null;
+		try {
+			const res = await fetch('/api/settings/new-year', {
+				method: 'POST',
+				headers: { ...auth(), 'Content-Type': 'application/json' },
+				body: JSON.stringify({ year: target })
+			});
+			const data = await res.json();
+			if (data.ok) {
+				created = { text: `${target} 가계부를 만들었습니다.`, url: data.url };
+				await loadYears();
+				year = target;
+				await loadSettings();
+			} else if (data.spreadsheetId) {
+				created = { text: `${target} 가계부는 만들었지만 '${STEP_TEXT[data.step] ?? data.step}' 단계에서 멈췄습니다. 문서를 열어 확인해 주세요.`, url: data.url };
+				await loadYears();
+			} else {
+				notice = data.error ?? '새해 가계부를 만들지 못했습니다.';
+			}
+		} catch {
+			notice = '새해 가계부를 만들지 못했습니다.';
+		} finally {
+			creating = false;
+		}
+	}
+
 	export function refresh() {
 		return year === null ? loadYears() : loadSettings(true);
 	}
@@ -232,7 +272,11 @@
 				{#each years as y}<option value={y.year}>{y.year}</option>{/each}
 			</select>
 		</label>
+		{#if nextYear !== null}
+			<button class="btn" onclick={createYear} disabled={creating || loading}>{creating ? '만드는 중...' : `${nextYear} 가계부 만들기`}</button>
+		{/if}
 		{#if notice}<p class="notice" role="status">{notice}</p>{/if}
+		{#if created}<p class="notice" role="status">{created.text} <a href={created.url} target="_blank" rel="noopener">문서 열기</a></p>{/if}
 	</div>
 
 	{#if loading}

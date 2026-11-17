@@ -8,10 +8,12 @@ export function householdDocName(year: number | string): string {
 
 const quoteName = (s: string) => `'${s.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
 
+export type DriveSheet = { id: string; name: string; parents?: string[] };
+
 /** 이름이 정확히 같은 스프레드시트(휴지통 제외, 최근에 고친 것 먼저). 찾지 못하면 file 없음. */
 export async function findExactSpreadsheet(
 	authorization: string, name: string
-): Promise<{ ok: true; file: { id: string; name: string } | null } | { ok: false; status: number }> {
+): Promise<{ ok: true; file: DriveSheet | null } | { ok: false; status: number }> {
 	const search = new URLSearchParams({
 		q: `name = ${quoteName(name)} and mimeType = 'application/vnd.google-apps.spreadsheet' and trashed = false`,
 		fields: 'files(id,name,parents)',
@@ -22,7 +24,7 @@ export async function findExactSpreadsheet(
 	});
 	const found = await fetch(`https://www.googleapis.com/drive/v3/files?${search}`, { headers: { authorization } });
 	if (!found.ok) return { ok: false, status: found.status };
-	const files: { id: string; name: string }[] = (await found.json()).files ?? [];
+	const files: DriveSheet[] = (await found.json()).files ?? [];
 	return { ok: true, file: files.find(f => f.name === name) ?? null };
 }
 
