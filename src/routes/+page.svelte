@@ -19,67 +19,18 @@
 
 	class AuthExpiredError extends Error {}
 
-	// 자동 스프레드시트 찾기 함수
+	// 올해 가계부 찾기: 서버가 이름이 정확히 같은 문서만 찾는다(HOUSEHOLD_DOC_NAME, 기본 "{year} 가계부")
 	async function findCurrentYearSpreadsheet(): Promise<string | null> {
 		if (!session?.accessToken) return null;
-
+		const currentYear = new Date().getFullYear();
 		try {
-			const currentYear = new Date().getFullYear();
-			console.log(`Searching for ${currentYear} spreadsheet...`);
-			
-			// 여러 가지 패턴으로 검색
-			const searchPatterns = [
-				`name contains '${currentYear} 가계부'`,
-				`name contains '${currentYear}가계부'`,
-				`name contains '가계부 ${currentYear}'`,
-				`name:'${currentYear} 가계부'`,
-				`name:'${currentYear}가계부'`,
-				`name contains '${currentYear}'`
-			];
-			
-			// 각 패턴으로 검색 (공유 드라이브 포함)
-			for (const pattern of searchPatterns) {
-				const searchQuery = `${pattern} and mimeType='application/vnd.google-apps.spreadsheet'`;
-				
-				// 공유 드라이브 포함 검색
-				const searchUrl = `https://www.googleapis.com/drive/v3/files?` + 
-					`q=${encodeURIComponent(searchQuery)}&` +
-					`supportsAllDrives=true&` +
-					`includeItemsFromAllDrives=true&` +
-					`corpora=allDrives&` +
-					`orderBy=modifiedTime desc`;
-
-				const response = await fetch(searchUrl, {
-					headers: {
-						'Authorization': `Bearer ${session.accessToken}`
-					}
-				});
-
-				if (response.status === 401) {
-					throw new AuthExpiredError();
-				}
-
-				if (response.ok) {
-					const data = await response.json();
-					const files = data.files || [];
-					
-					// 검색 결과에서 가장 적합한 파일 찾기
-					for (const file of files) {
-						console.log(`Checking file: ${file.name} (ID: ${file.id})`);
-						if (file.name && (
-							file.name.includes(`${currentYear} 가계부`) ||
-							file.name.includes(`${currentYear}가계부`) ||
-							file.name.includes(`가계부 ${currentYear}`) ||
-							(file.name.includes(currentYear.toString()) && file.name.includes('가계부'))
-						)) {
-							console.log(`Found matching spreadsheet: ${file.name}`);
-							return file.id;
-						}
-					}
-				}
-			}
-
-			return null;
+			const response = await fetch(`/api/ledger-document?year=${currentYear}`, {
+				headers: { Authorization: `Bearer ${session.accessToken}` }
+			});
+			if (response.status === 401) throw new AuthExpiredError();
+			if (!response.ok) return null;
+			const data = await response.json();
+			return data.spreadsheetId ?? null;
 		} catch (err) {
 			if (err instanceof AuthExpiredError) throw err;
 			console.error('Error searching for current year spreadsheet:', err);
