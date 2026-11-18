@@ -62,10 +62,16 @@ function toneOf(label: string, value: number | null): Tone | null {
 	return isBonus(label) ? 'bonus' : roleOf(label);
 }
 
+// 카드 전체 실적은 "채울 실적금액" 줄. 이 줄이 있으면 실적 배지는 이 값만 쓴다 (배달 실적 결제금액처럼 조건이 붙은 실적은 더하지 않는다, 2026-11-18)
+const isMainSpend = (label: string) => label.replace(/\s+/g, '') === '채울실적금액';
+
 function statusOf(items: CardItem[]): CardStatus | null {
 	const roles = items.map((i) => roleOf(i.label));
+	const hasMain = items.some((i) => isMainSpend(i.label));
 	const sum = (role: Role) => {
-		const values = items.filter((_, k) => roles[k] === role).map((i) => Math.max(0, i.value ?? 0));
+		const values = items
+			.filter((i, k) => roles[k] === role && !(role === 'spend' && hasMain && !isMainSpend(i.label)))
+			.map((i) => Math.max(0, i.value ?? 0));
 		return values.length ? values.reduce((a, b) => a + b, 0) : null;
 	};
 	const status = { spend: sum('spend'), limit: sum('limit'), bonus: sum('bonus') };

@@ -71,6 +71,15 @@ describe('parseCardUsage', () => {
 		expect(later.items.map((i) => i.tone)).toEqual(['spend', 'done']);
 	});
 
+	it('"채울 실적금액" 줄이 있으면 실적 배지는 그 값만 쓴다 (배달 실적 결제금액 같은 다른 실적 금액은 더하지 않는다, 2026-11-18)', () => {
+		const [lotte] = parseCardUsage([
+			['롯데카드(기순_롯데)'], ['채울 실적금액', '120,000'], ['남은 배달 실적 결제금액', '30,000'], ['남은 배달 실적혜택 한도', '5,000']
+		]);
+		expect(lotte.badges).toEqual([{ kind: 'spend', text: '실적까지 120,000원' }]);
+		const [done] = parseCardUsage([['롯데카드'], ['채울 실적금액', '0'], ['남은 배달 실적 결제금액', '30,000'], ['남은 배달 실적혜택 한도', '5,000']]);
+		expect(done.badges).toEqual([{ kind: 'limit', text: '한도 5,000원 남음' }]);
+	});
+
 	it('실적 금액도 실적 한도도 없으면 배지 없음', () => {
 		const [card] = parseCardUsage([['테스트카드D'], ['남은 카페 결제 건', '4']]);
 		expect(card.badges).toEqual([]);

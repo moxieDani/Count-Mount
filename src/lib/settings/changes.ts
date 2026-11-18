@@ -77,11 +77,14 @@ export function setStopDate(s: YearSettings, row: number, date: string | null): 
 type CardValues = { name: string; title: string; owner: string; settle: string; perf: string; account: string;
 	status: string; start: string | null; expiry: string | null; cancel: string | null };
 
+/** 실적 칸: 숫자(쉼표·띄어쓰기 허용)로 적으면 숫자로 쓴다. 카드사용내역 '채울 실적금액' 계산이 이 칸을 쓴다 (2026-11-18) */
+const perfCell = (v: string): Cell => (/^[\d,\s]+$/.test(v) && /\d/.test(v) ? Number(v.replace(/[,\s]/g, '')) : v);
+
 /** 카드 한 줄 쓰기: G~L(결제방식 이름·카드 이름·명의·정산·실적·계좌, 고칠 때는 결제방식 이름 빼고 H~L)와 O~R(상태·날짜) */
 function cardWrites(row: number, label: string, before: { main: Cell[]; state: Cell[] }, f: CardValues, withName: boolean): CellWrite[] {
 	const main: CellWrite = withName
-		? { range: `${ACCOUNT_TAB}!G${row}:L${row}`, before: [before.main], after: [[f.name, f.title, f.owner, f.settle, f.perf, f.account]], label }
-		: { range: `${ACCOUNT_TAB}!H${row}:L${row}`, before: [before.main.slice(1)], after: [[f.title, f.owner, f.settle, f.perf, f.account]], label };
+		? { range: `${ACCOUNT_TAB}!G${row}:L${row}`, before: [before.main], after: [[f.name, f.title, f.owner, f.settle, perfCell(f.perf), f.account]], label }
+		: { range: `${ACCOUNT_TAB}!H${row}:L${row}`, before: [before.main.slice(1)], after: [[f.title, f.owner, f.settle, perfCell(f.perf), f.account]], label };
 	return [main, {
 		range: `${ACCOUNT_TAB}!O${row}:R${row}`, before: [before.state],
 		after: [[f.status, dateCell(f.start), dateCell(f.expiry), dateCell(f.cancel)]], label: `${label} · 상태·날짜`, dates: [1, 2, 3]

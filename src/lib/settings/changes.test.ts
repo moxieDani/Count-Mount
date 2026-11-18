@@ -85,6 +85,13 @@ describe('바꾸기 계산', () => {
 		expect(Array.isArray(writes) && writes[0].label).toBe('카드 · 기순 · 기순_롯데');
 	});
 
+	it('실적은 숫자로 적으면 숫자로 쓴다 (카드사용내역 채울 실적금액 계산이 그 칸을 쓴다, 2026-11-18)', () => {
+		const w = updateCard(settings(), 1, { perf: '300,000' });
+		expect(Array.isArray(w) && w[0].after[0][3]).toBe(300000);
+		const t = updateCard(settings(), 1, { perf: '전월 30만' });
+		expect(Array.isArray(t) && t[0].after[0][3]).toBe('전월 30만');
+	});
+
 	it('이름 검사', () => {
 		expect(validateName('', ['A'])).toBe('이름을 적어 주세요');
 		expect(validateName(' A', [])).toBe('이름 앞뒤 띄어쓰기를 지워 주세요');
