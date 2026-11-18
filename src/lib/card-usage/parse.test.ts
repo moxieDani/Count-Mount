@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { cardBadges, parseCardUsage } from './parse';
 
-// 카드사용내역 월 시트의 I1:J102 를 Sheets API 로 읽은 모양.
-// 카드 이름 줄은 I:J 가 병합돼 J 값이 없다. 카드 이름·값은 가짜.
+// 카드사용내역 월 시트의 J1:K102 를 Sheets API 로 읽은 모양.
+// 카드 이름 줄은 J:K 가 병합돼 K 값이 없다. 카드 이름·값은 가짜.
 const ROWS = [
 	[],
 	['테스트카드A'],

@@ -6,7 +6,7 @@ import { fillDocName } from '$lib/server/docName';
 
 // 문서 이름. 테스트 중에는 .env 에 CARD_USAGE_DOC_NAME="{year} 테스트 카드사용내역" 을 둔다.
 const DEFAULT_DOC_NAME = '{year} 카드사용내역';
-const RANGE = 'I1:J102';
+const RANGE = 'J1:K102';   // 실적 칸 (I는 거래 표와 띄우는 빈 열, 2026-11-18)
 
 const quoteName = (s: string) => `'${s.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`; // Drive 검색어
 const quoteSheet = (s: string) => `'${s.replace(/'/g, "''")}'`; // A1 표기
