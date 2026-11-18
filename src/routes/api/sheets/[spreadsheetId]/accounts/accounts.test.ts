@@ -30,19 +30,19 @@ describe('GET /api/sheets/:id/accounts', () => {
 	});
 
 	it('탭 이름이 있으면 그 달 목록(이달 쓸 계정)', async () => {
-		const reads = stubSheets({ "'5월'!AI27:AI56": [['외식'], [''], ['배달']], '계정항목': [['X']] });
+		const reads = stubSheets({ "'5월'!AJ27:AJ56": [['외식'], [''], ['배달']], '계정항목': [['X']] });
 		const body = await (await call('5월')).json();
 		expect([body.accounts, body.cached]).toEqual([['외식', '배달'], false]);
-		expect(reads).toEqual(["'5월'!AI27:AI56"]);
+		expect(reads).toEqual(["'5월'!AJ27:AJ56"]);
 	});
 
 	it('비면 전체 목록(계정항목)', async () => {
-		stubSheets({ "'5월'!AI27:AI56": [], '계정항목': [['외식'], ['옛분류']] });
+		stubSheets({ "'5월'!AJ27:AJ56": [], '계정항목': [['외식'], ['옛분류']] });
 		expect((await (await call('5월')).json()).accounts).toEqual(['외식', '옛분류']);
 	});
 
 	it('실패하면 전체 목록', async () => {
-		stubSheets({ "'5월'!AI27:AI56": 400, '계정항목': [['외식']] });
+		stubSheets({ "'5월'!AJ27:AJ56": 400, '계정항목': [['외식']] });
 		expect((await (await call('5월')).json()).accounts).toEqual(['외식']);
 	});
 
@@ -53,12 +53,12 @@ describe('GET /api/sheets/:id/accounts', () => {
 	});
 
 	it('캐시는 탭마다 따로', async () => {
-		const reads = stubSheets({ "'5월'!AI27:AI56": [['외식']], "'6월'!AI27:AI56": [['배달']] });
+		const reads = stubSheets({ "'5월'!AJ27:AJ56": [['외식']], "'6월'!AJ27:AJ56": [['배달']] });
 		const id = `A${n}`;
 		expect((await (await call('5월', 'Bearer t', id)).json()).accounts).toEqual(['외식']);
 		expect((await (await call('6월', 'Bearer t', id)).json()).accounts).toEqual(['배달']);
 		expect((await (await call('5월', 'Bearer t', id)).json()).cached).toBe(true);
-		expect(reads).toEqual(["'5월'!AI27:AI56", "'6월'!AI27:AI56"]);
+		expect(reads).toEqual(["'5월'!AJ27:AJ56", "'6월'!AJ27:AJ56"]);
 	});
 
 	it('토큰 없으면 401', async () => {
