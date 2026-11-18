@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseSettings } from './read';
+import { isEmptySlot, parseSettings } from './read';
 import {
 	LOCKED, LOCKED_ROW, addCard, addCategory, changedOnly, clearCardAlert, clearTransferRow, describe as describeWrites, locked, parseAmount,
 	setBudget, setBudgets, setCardAlert, setStopDate, setTransferIncome, setTransferMemo, setTransferRow, updateCard, validateName
@@ -11,11 +11,11 @@ function rowsAt(first: number, entries: Record<number, unknown[]>): unknown[][] 
 	return Array.from({ length: Math.max(...keys) - first + 1 }, (_, i) => entries[first + i] ?? []);
 }
 
-/** 비고정 59·60줄, 카드 1·2·13 자리, 알림 3줄, 예산 49줄, 서은 구역 2줄이 찬 설정 */
+/** 비고정 59·60줄, 카드 1·2·13 자리(명의 기순), 알림 3줄, 예산 49줄, 서은 구역 2줄이 찬 설정 */
 function settings(over: { account?: Record<number, unknown[]>; cards?: Record<number, unknown[]> } = {}) {
 	return parseSettings([
 		rowsAt(4, over.account ?? { 59: ['식비', '외식', 46096], 60: ['식비', '배달'] }),
-		rowsAt(4, over.cards ?? { 4: ['기순_롯데', '기순'], 5: ['기순_삼성'], 16: ['기순_현대'], 17: ['------'] }),
+		rowsAt(4, over.cards ?? { 4: ['기순_롯데', '기순', '기순'], 5: ['기순_삼성', '기순'], 16: ['기순_현대', '기순'] }),
 		rowsAt(3, { 3: ['기순_롯데', '롯데', '', '0871', ''] }),
 		[],
 		rowsAt(1, { 49: ['', '', 400000] }),
@@ -33,30 +33,50 @@ describe('바꾸기 계산', () => {
 	it('자리가 없으면 오류', () => {
 		const full = Object.fromEntries(Array.from({ length: 10 }, (_, i) => [4 + i, ['월급', `수입${i}`]]));
 		expect(addCategory(settings({ account: full }), 'income', '월급', '새수입')).toEqual({ error: '자리가 다 찼습니다' });
-		const cards = Object.fromEntries(Array.from({ length: 13 }, (_, i) => [4 + i, [`카드${i}`]]));
-		expect(addCard(settings({ cards }), 'kisoon', { name: '새카드' })).toEqual({ error: '자리가 다 찼습니다' });
+		const cards = Object.fromEntries(Array.from({ length: 30 }, (_, i) => [4 + i, [`카드${i}`, '서은']]));
+		expect(addCard(settings({ cards }), 'kisoon', { name: '새카드' })).toEqual({ error: '자리가 다 찼습니다' });   // 30자리를 함께 쓴다
 	});
 
-	it('구분선 자리는 건너뜀', () => {
-		const cards = Object.fromEntries(Array.from({ length: 13 }, (_, i) => [4 + i, [`기순${i}`]]));
-		const writes = addCard(settings({ cards: { ...cards, 17: ['------'] } }), 'seoeun', { name: '서은_새카드', settle: '서은' });
-		expect(Array.isArray(writes) && writes[0].range).toBe('계정!G18:J18');   // 15번 자리(18줄), 14번 구분선 자리(17줄)는 건너뜀
-		const shared = addCard(settings(), 'shared', { name: '현금' });
-		expect(Array.isArray(shared) && shared[0].range).toBe('계정!G32:J32');
+	it('새 카드 자리: 같은 명의 첫 카드부터 아래로 첫 빈 줄, 그 명의 카드가 없으면 맨 위 첫 빈 줄', () => {
+		const cards = { 4: ['기순A', '기순'], 5: ['기순B', '기순'], 18: ['서은A', '서은'], 19: ['서은B', '서은'], 32: ['현금', '기순, 서은'] };
+		const at = (group: 'kisoon' | 'seoeun' | 'shared', s = settings({ cards })) => {
+			const w = addCard(s, group, { name: '새' }); return Array.isArray(w) ? w[0].range : w.error;
+		};
+		expect(at('kisoon')).toBe('계정!G6:K6');
+		expect(at('seoeun')).toBe('계정!G20:K20');
+		expect(at('shared')).toBe('계정!G33:K33');
+		expect(at('seoeun', settings())).toBe('계정!G6:K6');            // 서은 카드가 없으면 맨 위 첫 빈 줄
+		const old = settings({ cards: { 4: ['기순A', '기순'], 17: ['------'] } });
+		expect(at('kisoon', old)).toBe('계정!G5:K5');                     // 옛 구분선 줄은 빈 줄이 아니다
 	});
 
-	it('새 카드는 이름·정산·실적·계좌와 상태·날짜, 상태 기본은 사용 중', () => {
+	it('새 카드는 이름·명의·정산·실적·계좌와 상태·날짜, 상태 기본은 사용 중', () => {
 		const writes = addCard(settings(), 'kisoon', { name: '기순_우리', settle: '기순', start: '2026-03-15' });
 		expect(writes).toEqual([
-			{ range: '계정!G6:J6', before: [['', '', '', '']], after: [['기순_우리', '기순', '', '']], label: '카드 · 기순 · 기순_우리' },
-			{ range: '계정!M6:P6', before: [['', '', '', '']], after: [['사용 중', 46096, '', '']], label: '카드 · 기순 · 기순_우리 · 상태·날짜', dates: [1, 2, 3] }
+			{ range: '계정!G6:K6', before: [['', '', '', '', '']], after: [['기순_우리', '기순', '기순', '', '']], label: '카드 · 기순 · 기순_우리' },
+			{ range: '계정!N6:Q6', before: [['', '', '', '']], after: [['사용 중', 46096, '', '']], label: '카드 · 기순 · 기순_우리 · 상태·날짜', dates: [1, 2, 3] }
 		]);
+		const shared = addCard(settings(), 'shared', { name: '공용카드' });
+		expect(Array.isArray(shared) && shared[0].after[0].slice(0, 2)).toEqual(['공용카드', '기순, 서은']);
 	});
 
 	it('카드 이름은 고칠 수 없음', () => {
 		const writes = updateCard(settings(), 1, { name: '바꾼이름', status: '해지', cancel: '2026-03-15' } as never);
-		expect(Array.isArray(writes) && writes.map(w => w.range)).toEqual(['계정!H4:J4', '계정!M4:P4']);
+		expect(Array.isArray(writes) && writes.map(w => w.range)).toEqual(['계정!H4:K4', '계정!N4:Q4']);
 		expect(JSON.stringify(writes)).not.toContain('바꾼이름');
+	});
+
+	it('이름이 없어도 다른 카드 칸(계좌 등)에 글이 있는 줄은 빈 자리가 아니다 (옛 구분선 줄의 메모를 지킨다)', () => {
+		const cards: Record<number, unknown[]> = Object.fromEntries(Array.from({ length: 13 }, (_, i) => [4 + i, [`기순${i}`, '기순']]));
+		cards[17] = ['', '', '', '', '국민'];
+		const w = addCard(settings({ cards }), 'kisoon', { name: '새' });
+		expect(Array.isArray(w) && w[0].range).toBe('계정!G18:K18');
+		expect(parseSettings([[], rowsAt(4, cards), [], [], [], [], []], 2026).cards.filter(isEmptySlot)).toHaveLength(16);
+	});
+
+	it('카드 명의는 고칠 수 있다', () => {
+		const writes = updateCard(settings(), 1, { group: 'seoeun' });
+		expect(Array.isArray(writes) && writes[0]).toMatchObject({ range: '계정!H4:K4', before: [['기순', '기순', '', '']], after: [['서은', '기순', '', '']] });
 	});
 
 	it('이름 검사', () => {

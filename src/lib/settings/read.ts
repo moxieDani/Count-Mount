@@ -1,14 +1,19 @@
 /** 한 번 읽은 시트 값 → 해마다 설정 (설정 설계 4·7장). 순수 함수. */
 import {
-	ALERT_ROWS, BUDGET_ROWS, CARD_GROUPS, FIXED_ROWS, FORMULA_RANGES, SECTIONS, TRANSFER_ROWS, TRANSFER_SECTIONS,
-	cellKey, colName, parseRange, settingsRanges, slotRow, type GroupKey, type SectionKey
+	ALERT_ROWS, BUDGET_ROWS, CARD_SLOTS, FIXED_ROWS, FORMULA_RANGES, SECTIONS, TRANSFER_ROWS, TRANSFER_SECTIONS,
+	cellKey, colName, ownerGroup, parseRange, settingsRanges, slotRow, type GroupKey, type SectionKey
 } from './layout';
 
 export type Category = { section: SectionKey; row: number; group: string; name: string; stop: string | null };
 export type Card = {
-	group: GroupKey; slot: number; row: number; name: string; settle: string; perf: string; account: string;
+	group: GroupKey | null; owner: string; slot: number; row: number; name: string; settle: string; perf: string; account: string;
 	status: string; start: string | null; expiry: string | null; cancel: string | null;
 };
+/** 새 카드를 넣을 수 있는 빈 자리: 이름뿐 아니라 그 줄 카드 칸(명의·정산·실적·계좌·상태·날짜)이 모두 비었다.
+ *  옛 구분선 줄에 남은 계좌·메모 같은 글을 새 카드가 덮지 않게 한다 (2026-11-18) */
+export const isEmptySlot = (c: Card): boolean =>
+	![c.name, c.owner, c.settle, c.perf, c.account, c.status].some(Boolean) && !c.start && !c.expiry && !c.cancel;
+
 export type CardAlert = { row: number; method: string; company: string; front: string; back: string; smsAmount: number | null };
 export type FixedRule = { row: number; label: string; text: string };
 export type Budget = { row: number; accountRow: number; label: string; amount: number | null };
@@ -68,14 +73,15 @@ export function parseSettings(valueRanges: unknown[][][], year: number, formulaR
 			return { section: sec.key, row, group: text(at(account, i, 0)), name: text(at(account, i, 1)), stop: dateOf(at(account, i, 2)) };
 		}));
 
-	const cards: Card[] = CARD_GROUPS.flatMap(group => group.slots.map(slot => {
-		const i = slot - 1;
+	// 카드 30자리 (G 이름, H 명의, I 정산, J 실적, K 연결된 계좌, N~Q 상태·날짜). 묶음은 명의로 (2026-11-18)
+	const cards: Card[] = Array.from({ length: CARD_SLOTS }, (_, i) => {
+		const slot = i + 1, owner = text(at(cardRows, i, 1));
 		return {
-			group: group.key, slot, row: slotRow(slot), name: text(at(cardRows, i, 0)), settle: text(at(cardRows, i, 1)),
-			perf: text(at(cardRows, i, 2)), account: text(at(cardRows, i, 3)), status: text(at(cardRows, i, 6)),
-			start: dateOf(at(cardRows, i, 7)), expiry: dateOf(at(cardRows, i, 8)), cancel: dateOf(at(cardRows, i, 9))
+			group: ownerGroup(owner), owner, slot, row: slotRow(slot), name: text(at(cardRows, i, 0)), settle: text(at(cardRows, i, 2)),
+			perf: text(at(cardRows, i, 3)), account: text(at(cardRows, i, 4)), status: text(at(cardRows, i, 7)),
+			start: dateOf(at(cardRows, i, 8)), expiry: dateOf(at(cardRows, i, 9)), cancel: dateOf(at(cardRows, i, 10))
 		};
-	}));
+	});
 
 	const alerts: CardAlert[] = [];
 	for (let row = ALERT_ROWS.first; row <= ALERT_ROWS.last; row++) {

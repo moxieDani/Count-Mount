@@ -5,10 +5,10 @@
  * 이름 바꾸기·순서 바꾸기·분류와 카드 지우기는 없다.
  */
 import {
-	ACCOUNT_TAB, ALERT_ROWS, AUTO_TAB, CARD_GROUPS, FIXED_ROWS, SECTIONS, TRANSFER_ROWS, TRANSFER_TAB,
-	budgetTab, cellKey, colName, type GroupKey, type SectionKey
+	ACCOUNT_TAB, ALERT_ROWS, AUTO_TAB, FIXED_ROWS, SECTIONS, TRANSFER_ROWS, TRANSFER_TAB,
+	budgetTab, cellKey, colName, ownerName, type GroupKey, type SectionKey
 } from './layout';
-import { dateToSerial, serialToDate, type CardAlert, type YearSettings } from './read';
+import { dateToSerial, serialToDate, type CardAlert, type YearSettings, isEmptySlot } from './read';
 
 export type Cell = string | number | boolean;
 /**
@@ -18,7 +18,7 @@ export type Cell = string | number | boolean;
 export type CellWrite = { range: string; before: Cell[][]; after: Cell[][]; label: string; dates?: number[]; formula?: boolean };
 export type Result = CellWrite[] | { error: string };
 export type CardFields = {
-	name?: string; settle?: string; perf?: string; account?: string;
+	name?: string; group?: GroupKey; settle?: string; perf?: string; account?: string;
 	status?: string; start?: string | null; expiry?: string | null; cancel?: string | null;
 };
 
@@ -53,7 +53,6 @@ export function validateName(name: string, existing: string[]): string | null {
 }
 
 const sectionName = (key: SectionKey) => SECTIONS.find(s => s.key === key)?.name ?? key;
-const groupName = (key: GroupKey) => CARD_GROUPS.find(g => g.key === key)?.name ?? key;
 
 export function addCategory(s: YearSettings, section: SectionKey, group: string, name: string): Result {
 	const problem = validateName(name, s.categories.map(c => c.name).filter(Boolean));
@@ -75,12 +74,16 @@ export function setStopDate(s: YearSettings, row: number, date: string | null): 
 	return [{ range: `${ACCOUNT_TAB}!E${row}`, before: [[dateCell(c.stop)]], after: [[dateCell(date)]], label: `지출 분류 · ${c.name} · 그만 쓴 날`, dates: [0] }];
 }
 
-function cardWrites(row: number, label: string, before: { main: Cell[]; state: Cell[] }, f: Required<Omit<CardFields, 'name'>> & { name: string }, withName: boolean): CellWrite[] {
+type CardValues = { name: string; owner: string; settle: string; perf: string; account: string;
+	status: string; start: string | null; expiry: string | null; cancel: string | null };
+
+/** 카드 한 줄 쓰기: G~K(이름·명의·정산·실적·계좌, 고칠 때는 이름 빼고 H~K)와 N~Q(상태·날짜) */
+function cardWrites(row: number, label: string, before: { main: Cell[]; state: Cell[] }, f: CardValues, withName: boolean): CellWrite[] {
 	const main: CellWrite = withName
-		? { range: `${ACCOUNT_TAB}!G${row}:J${row}`, before: [before.main], after: [[f.name, f.settle, f.perf, f.account]], label }
-		: { range: `${ACCOUNT_TAB}!H${row}:J${row}`, before: [before.main.slice(1)], after: [[f.settle, f.perf, f.account]], label };
+		? { range: `${ACCOUNT_TAB}!G${row}:K${row}`, before: [before.main], after: [[f.name, f.owner, f.settle, f.perf, f.account]], label }
+		: { range: `${ACCOUNT_TAB}!H${row}:K${row}`, before: [before.main.slice(1)], after: [[f.owner, f.settle, f.perf, f.account]], label };
 	return [main, {
-		range: `${ACCOUNT_TAB}!M${row}:P${row}`, before: [before.state],
+		range: `${ACCOUNT_TAB}!N${row}:Q${row}`, before: [before.state],
 		after: [[f.status, dateCell(f.start), dateCell(f.expiry), dateCell(f.cancel)]], label: `${label} · 상태·날짜`, dates: [1, 2, 3]
 	}];
 }
@@ -89,25 +92,28 @@ export function addCard(s: YearSettings, group: GroupKey, fields: CardFields): R
 	const name = fields.name ?? '';
 	const problem = validateName(name, s.cards.map(c => c.name).filter(Boolean));
 	if (problem) return { error: problem };
-	const slot = s.cards.find(c => c.group === group && !c.name);   // 구분선 자리(14·28)는 YearSettings에 없다
+	// 같은 명의 첫 카드부터 아래로 첫 빈 줄, 그 명의 카드가 없으면 맨 위 첫 빈 줄 (30자리를 함께 쓴다, 2026-11-18)
+	const first = s.cards.find(c => c.group === group && c.name);
+	const slot = (first && s.cards.find(c => c.slot >= first.slot && isEmptySlot(c))) ?? s.cards.find(isEmptySlot);
 	if (!slot) return { error: FULL };
-	const before = { main: [slot.name, slot.settle, slot.perf, slot.account],
+	const before = { main: [slot.name, slot.owner, slot.settle, slot.perf, slot.account],
 		state: [slot.status, dateCell(slot.start), dateCell(slot.expiry), dateCell(slot.cancel)] };
-	return cardWrites(slot.row, `카드 · ${groupName(group)} · ${name}`, before, {
-		name, settle: fields.settle ?? '', perf: fields.perf ?? '', account: fields.account ?? '',
+	return cardWrites(slot.row, `카드 · ${ownerName(group)} · ${name}`, before, {
+		name, owner: ownerName(group), settle: fields.settle ?? '', perf: fields.perf ?? '', account: fields.account ?? '',
 		status: fields.status || '사용 중', start: fields.start ?? null, expiry: fields.expiry ?? null, cancel: fields.cancel ?? null
 	}, true);
 }
 
-/** 카드 고치기: 이름(G) 말고 정산·실적·계좌·상태·날짜. */
+/** 카드 고치기: 이름(G) 말고 명의·정산·실적·계좌·상태·날짜. */
 export function updateCard(s: YearSettings, slot: number, fields: Omit<CardFields, 'name'>): Result {
 	const card = s.cards.find(c => c.slot === slot && c.name);
 	if (!card) return { error: '카드가 없습니다' };
-	const before = { main: [card.name, card.settle, card.perf, card.account],
+	const before = { main: [card.name, card.owner, card.settle, card.perf, card.account],
 		state: [card.status, dateCell(card.start), dateCell(card.expiry), dateCell(card.cancel)] };
 	const pick = <T>(v: T | undefined, cur: T) => (v === undefined ? cur : v);
-	return cardWrites(card.row, `카드 · ${groupName(card.group)} · ${card.name}`, before, {
-		name: card.name, settle: pick(fields.settle, card.settle), perf: pick(fields.perf, card.perf), account: pick(fields.account, card.account),
+	const who = card.group ? ownerName(card.group) : card.owner || '명의 없음';
+	return cardWrites(card.row, `카드 · ${who} · ${card.name}`, before, {
+		name: card.name, owner: fields.group ? ownerName(fields.group) : card.owner, settle: pick(fields.settle, card.settle), perf: pick(fields.perf, card.perf), account: pick(fields.account, card.account),
 		status: pick(fields.status, card.status), start: pick(fields.start, card.start), expiry: pick(fields.expiry, card.expiry),
 		cancel: pick(fields.cancel, card.cancel)
 	}, false);

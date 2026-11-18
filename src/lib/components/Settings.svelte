@@ -2,9 +2,9 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import {
-		CARD_COMPANIES, CARD_GROUPS, CARD_STATUSES, SECTIONS, TRANSFER_TAB, budgetTab, colName, type GroupKey, type SectionKey
+		CARD_COMPANIES, CARD_OWNERS, CARD_STATUSES, SECTIONS, TRANSFER_TAB, budgetTab, colName, type GroupKey, type SectionKey
 	} from '$lib/settings/layout';
-	import type { Card, CardAlert, YearSettings } from '$lib/settings/read';
+	import { isEmptySlot, type Card, type CardAlert, type YearSettings } from '$lib/settings/read';
 	import {
 		addCard, addCategory, amountText, changedOnly, clearCardAlert, clearFixedRule, clearTransferRow, describe, locked, parseAmount,
 		setBudgets, setCardAlert, setFixedRule, setStopDate, setTransferIncome, setTransferMemo, setTransferRow, updateCard,
@@ -183,27 +183,30 @@
 	}
 
 	// ── 카드 ──
-	type CardDraft = { settle: string; perf: string; account: string; status: string; start: string; expiry: string; cancel: string };
+	type CardDraft = { group: GroupKey | ''; settle: string; perf: string; account: string; status: string; start: string; expiry: string; cancel: string };
 	let cardDraft = $state<Record<number, CardDraft>>({});
 	let newCard = $state<Record<string, CardDraft & { name: string }>>({});
 	let newAlert = $state<Record<string, { company: string; front: string; back: string; sms: string }>>({});
-	const cardsOf = (key: GroupKey) => (settings?.cards ?? []).filter(c => c.group === key);
+	/** 명의별 카드 (null이면 명의가 비었거나 모르는 글인 카드). 옛 구분선 줄(-만)은 카드가 아니다 */
+	const cardsOf = (key: GroupKey | null) => (settings?.cards ?? []).filter(c => c.name && !/^-+$/.test(c.name) && c.group === key);
+	const emptySlots = () => (settings?.cards ?? []).filter(isEmptySlot).length;
+	const OWNER_SECTIONS: { key: GroupKey | null; name: string }[] = [...CARD_OWNERS, { key: null, name: '명의 없음' }];
 	const alertsOf = (name: string) => (settings?.alerts ?? []).filter(a => a.method === name);
 	const orphanAlerts = () => (settings?.alerts ?? []).filter(a => !(settings?.cards ?? []).some(c => c.name && c.name === a.method));
-	const emptyCard = (): CardDraft => ({ settle: '', perf: '', account: '', status: '사용 중', start: '', expiry: '', cancel: '' });
+	const emptyCard = (): CardDraft => ({ group: '', settle: '', perf: '', account: '', status: '사용 중', start: '', expiry: '', cancel: '' });
 
 	function submitCardUpdate(card: Card) {
 		if (!settings) return;
 		const d = cardDraft[card.slot];
 		propose(updateCard(settings, card.slot, {
-			settle: d.settle, perf: d.perf, account: d.account, status: d.status,
+			group: d.group || undefined, settle: d.settle, perf: d.perf, account: d.account, status: d.status,
 			start: d.start || null, expiry: d.expiry || null, cancel: d.cancel || null
 		}));
 	}
 
 	function submitNewCard(key: GroupKey) {
 		if (!settings) return;
-		const d = newCard[key];
+		const { group: _unused, ...d } = newCard[key];   // 명의는 고른 묶음(key)으로 정한다
 		propose(addCard(settings, key, { ...d, start: d.start || null, expiry: d.expiry || null, cancel: d.cancel || null }));
 	}
 
@@ -242,10 +245,10 @@
 		newCategory = Object.fromEntries(SECTIONS.map(s => [s.key, { group: groupsOf(s.key)[0] ?? '__new', newGroup: '', name: '' }]));
 		stopDraft = Object.fromEntries(settings.categories.filter(c => c.name).map(c => [c.row, c.stop ?? '']));
 		cardDraft = Object.fromEntries(settings.cards.filter(c => c.name).map(c => [c.slot, {
-			settle: c.settle, perf: c.perf, account: c.account, status: c.status || '사용 중',
+			group: c.group ?? '', settle: c.settle, perf: c.perf, account: c.account, status: c.status || '사용 중',
 			start: c.start ?? '', expiry: c.expiry ?? '', cancel: c.cancel ?? ''
 		}]));
-		newCard = Object.fromEntries(CARD_GROUPS.map(g => [g.key, { ...emptyCard(), name: '' }]));
+		newCard = Object.fromEntries(CARD_OWNERS.map(g => [g.key, { ...emptyCard(), name: '' }]));
 		const alertForms: Record<string, { company: string; front: string; back: string; sms: string }> = {};
 		for (const a of settings.alerts) alertForms[`row:${a.row}`] = { company: a.company, front: a.front, back: a.back, sms: a.smsAmount === null ? '' : String(a.smsAmount) };
 		for (const c of settings.cards.filter(c => c.name)) alertForms[`new:${c.name}`] = { company: CARD_COMPANIES[0], front: '', back: '', sms: '' };
@@ -329,13 +332,19 @@
 		<div class="block">
 			<button class="block-head" onclick={() => toggle('cards')}>카드 <span>{open.cards ? '접기' : '펼치기'}</span></button>
 			{#if open.cards}
-				{#each CARD_GROUPS as g}
-					<h3>{g.name} <small>빈 자리 {cardsOf(g.key).filter(c => !c.name).length}개</small></h3>
-					{#each cardsOf(g.key).filter(c => c.name) as c (c.slot)}
+				<p class="muted">빈 자리 {emptySlots()}개 (30자리를 명의와 상관없이 함께 씁니다)</p>
+				{#each OWNER_SECTIONS as g}
+					{#if g.key !== null || cardsOf(null).length}
+					<h3>{g.name}</h3>
+					{#each cardsOf(g.key) as c (c.slot)}
 						{#if cardDraft[c.slot]}
 							<div class="card">
 								<strong>{c.name}</strong>
 								<div class="grid">
+									<label>명의 <select bind:value={cardDraft[c.slot].group}>
+										{#if !c.group}<option value="">고르세요</option>{/if}
+										{#each CARD_OWNERS as o}<option value={o.key}>{o.name}</option>{/each}
+									</select></label>
 									<label>정산 <input bind:value={cardDraft[c.slot].settle} /></label>
 									<label>실적 <input bind:value={cardDraft[c.slot].perf} /></label>
 									<label>연결된 계좌 <input bind:value={cardDraft[c.slot].account} /></label>
@@ -373,22 +382,26 @@
 							</div>
 						{/if}
 					{/each}
-					{#if cardsOf(g.key).every(c => c.name)}
+					{#if g.key === null}
+						<!-- 명의 없는 카드는 위에서 명의를 골라 고친다 -->
+					{:else if emptySlots() === 0}
 						<p class="muted">자리가 다 찼습니다</p>
 					{:else if newCard[g.key]}
+						{@const key = g.key}
 						<div class="card new">
-							<strong>새 카드</strong>
+							<strong>새 카드 ({g.name})</strong>
 							<div class="grid">
-								<label>이름 <input bind:value={newCard[g.key].name} /></label>
-								<label>정산 <input bind:value={newCard[g.key].settle} /></label>
-								<label>실적 <input bind:value={newCard[g.key].perf} /></label>
-								<label>연결된 계좌 <input bind:value={newCard[g.key].account} /></label>
-								<label>상태 <select bind:value={newCard[g.key].status}>{#each CARD_STATUSES as st}<option>{st}</option>{/each}</select></label>
-								<label>시작일 <input type="date" bind:value={newCard[g.key].start} /></label>
-								<label>만료일 <input type="date" bind:value={newCard[g.key].expiry} /></label>
+								<label>이름 <input bind:value={newCard[key].name} /></label>
+								<label>정산 <input bind:value={newCard[key].settle} /></label>
+								<label>실적 <input bind:value={newCard[key].perf} /></label>
+								<label>연결된 계좌 <input bind:value={newCard[key].account} /></label>
+								<label>상태 <select bind:value={newCard[key].status}>{#each CARD_STATUSES as st}<option>{st}</option>{/each}</select></label>
+								<label>시작일 <input type="date" bind:value={newCard[key].start} /></label>
+								<label>만료일 <input type="date" bind:value={newCard[key].expiry} /></label>
 							</div>
-							<button class="btn" onclick={() => submitNewCard(g.key)}>더하기</button>
+							<button class="btn" onclick={() => submitNewCard(key)}>더하기</button>
 						</div>
+					{/if}
 					{/if}
 				{/each}
 				{#if orphanAlerts().length}

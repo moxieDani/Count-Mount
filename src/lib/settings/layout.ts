@@ -14,21 +14,21 @@ export const SECTIONS: { key: SectionKey; name: string; first: number; last: num
 	{ key: 'variable', name: '비고정 소비지출', first: 59, last: 88 }
 ];
 
-const range = (a: number, b: number) => Array.from({ length: b - a + 1 }, (_, i) => a + i);
-
-/** 결제방식 자리 묶음. 자리 n → 계정 줄 n+3. 14·28은 구분선 자리 */
-export const CARD_GROUPS: { key: GroupKey; name: string; slots: number[] }[] = [
-	{ key: 'kisoon', name: '기순', slots: range(1, 13) },
-	{ key: 'seoeun', name: '서은', slots: range(15, 27) },
-	{ key: 'shared', name: '함께', slots: [29, 30] }
+/** 카드 명의(계정 H열 값). 묶음은 줄 자리 대신 명의로 정한다, 구분선 줄은 없다 (2026-11-18).
+ *  결제방식 자리 n(1~30) → 계정 줄 n+3, 30자리는 명의와 상관없이 함께 쓴다. */
+export const CARD_OWNERS: { key: GroupKey; name: string }[] = [
+	{ key: 'kisoon', name: '기순' }, { key: 'seoeun', name: '서은' }, { key: 'shared', name: '기순, 서은' }
 ];
-export const SEPARATOR_SLOTS = [14, 28];
-export const SEPARATOR = '------';
+export const CARD_SLOTS = 30;
+const squash = (s: string) => s.replace(/\s+/g, '');
+/** 명의 글 → 묶음 (띄어쓰기는 빼고 견준다). 모르는 글·빈칸은 null */
+export const ownerGroup = (owner: string): GroupKey | null => CARD_OWNERS.find(o => squash(o.name) === squash(owner))?.key ?? null;
+export const ownerName = (key: GroupKey): string => CARD_OWNERS.find(o => o.key === key)?.name ?? key;
 export const slotRow = (slot: number) => slot + 3;
 
-/** 카드 줄 칸 (계정 G~P): G 이름, H 정산, I 실적, J 연결된 계좌, M 상태, N 시작일, O 만료일, P 해지일.
+/** 카드 줄 칸 (계정 G~Q): G 이름, H 명의, I 정산, J 실적, K 연결된 계좌, L·M 메모, N 상태, O 시작일, P 만료일, Q 해지일.
  *  F는 가계부 계정 표(B~E, E 그만 쓴 날)와 띄우는 빈 열 (2026-11-18) */
-export const CARD_COLUMNS = { name: 'F', settle: 'G', perf: 'H', account: 'I', status: 'L', start: 'M', expiry: 'N', cancel: 'O' } as const;
+export const CARD_COLUMNS = { name: 'G', owner: 'H', settle: 'I', perf: 'J', account: 'K', status: 'N', start: 'O', expiry: 'P', cancel: 'Q' } as const;
 export const CARD_STATUSES = ['사용 중', '해지', '만료'];
 export const CARD_COMPANIES = ['KB국민', '롯데', '삼성', '우리', '현대', '신한', '하나', 'NH농협', '씨티', 'IBK', 'BC'];
 
@@ -76,7 +76,7 @@ export const FORMULA_RANGES = 6;
 export function settingsRanges(year: number): string[] {
 	return [
 		`${ACCOUNT_TAB}!C4:E88`,
-		`${ACCOUNT_TAB}!G4:P33`,
+		`${ACCOUNT_TAB}!G4:Q33`,
 		`'${AUTO_TAB}'!A${ALERT_ROWS.first}:E${ALERT_ROWS.last}`,
 		`'${AUTO_TAB}'!G${FIXED_ROWS.first}:H${FIXED_ROWS.last}`,
 		`'${budgetTab(year)}'!D1:F100`,
