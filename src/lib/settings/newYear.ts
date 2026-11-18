@@ -60,8 +60,8 @@ export function planNewYear(last: YearSettings, year: number): CellWrite[] {
 			state[slot - 1] = [c.status, dateCell(c.start), dateCell(c.expiry), dateCell(c.cancel)];
 		});
 	}
-	out.push(write(`${ACCOUNT_TAB}!F4:I33`, main, '새해 · 카드'));
-	out.push(write(`${ACCOUNT_TAB}!L4:O33`, state, '새해 · 카드 상태·날짜', [1, 2, 3]));
+	out.push(write(`${ACCOUNT_TAB}!G4:J33`, main, '새해 · 카드'));
+	out.push(write(`${ACCOUNT_TAB}!M4:P33`, state, '새해 · 카드 상태·날짜', [1, 2, 3]));
 
 	// 카드 알림 연결: 뺀 카드의 줄은 빼고 앞줄부터
 	const alerts = last.alerts.filter(a => !removedCards.has(a.method))

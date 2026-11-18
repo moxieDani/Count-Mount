@@ -77,10 +77,10 @@ export function setStopDate(s: YearSettings, row: number, date: string | null): 
 
 function cardWrites(row: number, label: string, before: { main: Cell[]; state: Cell[] }, f: Required<Omit<CardFields, 'name'>> & { name: string }, withName: boolean): CellWrite[] {
 	const main: CellWrite = withName
-		? { range: `${ACCOUNT_TAB}!F${row}:I${row}`, before: [before.main], after: [[f.name, f.settle, f.perf, f.account]], label }
-		: { range: `${ACCOUNT_TAB}!G${row}:I${row}`, before: [before.main.slice(1)], after: [[f.settle, f.perf, f.account]], label };
+		? { range: `${ACCOUNT_TAB}!G${row}:J${row}`, before: [before.main], after: [[f.name, f.settle, f.perf, f.account]], label }
+		: { range: `${ACCOUNT_TAB}!H${row}:J${row}`, before: [before.main.slice(1)], after: [[f.settle, f.perf, f.account]], label };
 	return [main, {
-		range: `${ACCOUNT_TAB}!L${row}:O${row}`, before: [before.state],
+		range: `${ACCOUNT_TAB}!M${row}:P${row}`, before: [before.state],
 		after: [[f.status, dateCell(f.start), dateCell(f.expiry), dateCell(f.cancel)]], label: `${label} · 상태·날짜`, dates: [1, 2, 3]
 	}];
 }
@@ -99,7 +99,7 @@ export function addCard(s: YearSettings, group: GroupKey, fields: CardFields): R
 	}, true);
 }
 
-/** 카드 고치기: 이름(F) 말고 정산·실적·계좌·상태·날짜. */
+/** 카드 고치기: 이름(G) 말고 정산·실적·계좌·상태·날짜. */
 export function updateCard(s: YearSettings, slot: number, fields: Omit<CardFields, 'name'>): Result {
 	const card = s.cards.find(c => c.slot === slot && c.name);
 	if (!card) return { error: '카드가 없습니다' };

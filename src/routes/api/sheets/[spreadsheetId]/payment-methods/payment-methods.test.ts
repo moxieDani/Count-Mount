@@ -31,25 +31,25 @@ describe('GET /api/sheets/:id/payment-methods', () => {
 	});
 
 	it('탭 이름이 있으면 그 달 목록(이달 쓸 카드)', async () => {
-		const reads = stubSheets({ "'5월'!AI27:AI56": [['A'], [''], ['------'], ['B']], '계정!F4:F33': [['X']] });
+		const reads = stubSheets({ "'5월'!AI27:AI56": [['A'], [''], ['------'], ['B']], '계정!G4:G33': [['X']] });
 		expect(await (await call('5월')).json()).toEqual({ accounts: ['A', 'B'], cached: false });
 		expect(reads).toEqual(["'5월'!AI27:AI56"]);
 	});
 
 	it('달 목록이 비면 전체 목록', async () => {
-		stubSheets({ "'5월'!AI27:AI56": [], '계정!F4:F33': [['X'], ['------'], ['Y']] });
+		stubSheets({ "'5월'!AI27:AI56": [], '계정!G4:G33': [['X'], ['------'], ['Y']] });
 		expect((await (await call('5월')).json()).accounts).toEqual(['X', 'Y']);
 	});
 
 	it('달 목록 읽기가 실패하면 전체 목록', async () => {
-		stubSheets({ "'5월'!AI27:AI56": 400, '계정!F4:F33': [['X']] });
+		stubSheets({ "'5월'!AI27:AI56": 400, '계정!G4:G33': [['X']] });
 		expect((await (await call('5월')).json()).accounts).toEqual(['X']);
 	});
 
 	it('탭 이름이 없으면 전체 목록', async () => {
-		const reads = stubSheets({ '계정!F4:F33': [['X']] });
+		const reads = stubSheets({ '계정!G4:G33': [['X']] });
 		expect((await (await call(null)).json()).accounts).toEqual(['X']);
-		expect(reads).toEqual(['계정!F4:F33']);
+		expect(reads).toEqual(['계정!G4:G33']);
 	});
 
 	it('캐시는 탭마다 따로', async () => {

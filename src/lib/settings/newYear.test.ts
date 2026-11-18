@@ -40,7 +40,7 @@ describe('새해 설정 가져오기', () => {
 		const variable = at(writes, '계정!C59:E88')!;
 		expect(variable.slice(0, 3)).toEqual([['식비', '외식', ''], ['식비', '카페', d('2027-03-15')], ['', '', '']]);
 		expect(at(writes, '계정!C34:E58')!.slice(0, 2)).toEqual([['주거', '관리비', ''], ['', '', '']]);
-		const names = at(writes, '계정!F4:I33')!.map(r => r[0]);
+		const names = at(writes, '계정!G4:J33')!.map(r => r[0]);
 		expect(names.slice(0, 3)).toEqual(['기순A', '기순C', '']);
 		const alerts = at(writes, "'자동 기록 설정'!A3:E42")!;
 		expect(alerts.slice(0, 3)).toEqual([['기순A', '롯데', '', '8871', ''], ['서은A', '국민', '5123', '', 30000], ['', '', '', '', '']]);
@@ -48,13 +48,13 @@ describe('새해 설정 가져오기', () => {
 	});
 
 	it('앞자리부터 채우고 구분선 자리는 비운다', () => {
-		const rows = at(writes, '계정!F4:I33')!;
+		const rows = at(writes, '계정!G4:J33')!;
 		expect(rows).toHaveLength(30);
 		expect(rows[13][0]).toBe('------');                 // 14번 자리
 		expect(rows[14][0]).toBe('서은A');                  // 15번 자리
 		expect(rows[27][0]).toBe('------');                 // 28번 자리
 		expect(rows[28][0]).toBe('현금');                   // 29번 자리
-		expect(at(writes, '계정!L4:O33')![0]).toEqual(['사용 중', d('2025-01-01'), d('2029-01-01'), '']);
+		expect(at(writes, '계정!M4:P33')![0]).toEqual(['사용 중', d('2025-01-01'), d('2029-01-01'), '']);
 	});
 
 	it('해 안에 그만 쓰는 분류는 날짜와 함께 남긴다', () => {

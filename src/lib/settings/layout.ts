@@ -26,7 +26,8 @@ export const SEPARATOR_SLOTS = [14, 28];
 export const SEPARATOR = '------';
 export const slotRow = (slot: number) => slot + 3;
 
-/** 카드 줄 칸 (계정 F~O): F 이름, G 정산, H 실적, I 연결된 계좌, L 상태, M 시작일, N 만료일, O 해지일 */
+/** 카드 줄 칸 (계정 G~P): G 이름, H 정산, I 실적, J 연결된 계좌, M 상태, N 시작일, O 만료일, P 해지일.
+ *  F는 가계부 계정 표(B~E, E 그만 쓴 날)와 띄우는 빈 열 (2026-11-18) */
 export const CARD_COLUMNS = { name: 'F', settle: 'G', perf: 'H', account: 'I', status: 'L', start: 'M', expiry: 'N', cancel: 'O' } as const;
 export const CARD_STATUSES = ['사용 중', '해지', '만료'];
 export const CARD_COMPANIES = ['KB국민', '롯데', '삼성', '우리', '현대', '신한', '하나', 'NH농협', '씨티', 'IBK', 'BC'];
@@ -75,7 +76,7 @@ export const FORMULA_RANGES = 6;
 export function settingsRanges(year: number): string[] {
 	return [
 		`${ACCOUNT_TAB}!C4:E88`,
-		`${ACCOUNT_TAB}!F4:O33`,
+		`${ACCOUNT_TAB}!G4:P33`,
 		`'${AUTO_TAB}'!A${ALERT_ROWS.first}:E${ALERT_ROWS.last}`,
 		`'${AUTO_TAB}'!G${FIXED_ROWS.first}:H${FIXED_ROWS.last}`,
 		`'${budgetTab(year)}'!D1:F100`,

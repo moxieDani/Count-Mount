@@ -16,7 +16,7 @@ describe('결제방식 목록 다듬기', () => {
 	it('그 달 탭의 이달 쓸 카드 범위, 전체 목록 범위', () => {
 		expect(monthListRange('5월')).toBe("'5월'!AI27:AI56");
 		expect(monthListRange("a'b")).toBe("'a''b'!AI27:AI56");
-		expect(FULL_LIST_RANGE).toBe('계정!F4:F33');
+		expect(FULL_LIST_RANGE).toBe('계정!G4:G33');
 	});
 });
 

@@ -4,7 +4,7 @@
  * 비었거나 읽지 못하면 계정 탭 결제방식 30칸 전체.
  */
 
-export const FULL_LIST_RANGE = '계정!F4:F33';
+export const FULL_LIST_RANGE = '계정!G4:G33';   // 결제방식목록 (F는 빈 열, 2026-11-18)
 
 const SEPARATOR = /^-+$/;
 

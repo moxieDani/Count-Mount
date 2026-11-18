@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { budgetTab, settingsRanges } from './layout';
 import { dateToSerial, parseSettings, serialToDate } from './read';
 
-/** settingsRanges 차례대로: 계정 C4:E88, 계정 F4:O33, 알림 A3:E42, 고정비 G3:H22, 예산 D1:F100, 자동이체 A1:J77, 설정 기록 A2:E */
+/** settingsRanges 차례대로: 계정 C4:E88, 계정 G4:P33, 알림 A3:E42, 고정비 G3:H22, 예산 D1:F100, 자동이체 A1:J77, 설정 기록 A2:E */
 function ranges(over: Partial<Record<number, unknown[][]>> = {}): unknown[][][] {
 	return Array.from({ length: 7 }, (_, i) => over[i] ?? []);
 }
@@ -15,7 +15,7 @@ function rowsAt(first: number, entries: Record<number, unknown[]>): unknown[][] 
 describe('설정 읽기', () => {
 	it('범위는 한 번의 묶음 요청으로', () => {
 		expect(settingsRanges(2026)).toEqual([
-			'계정!C4:E88', '계정!F4:O33', "'자동 기록 설정'!A3:E42", "'자동 기록 설정'!G3:H22",
+			'계정!C4:E88', '계정!G4:P33', "'자동 기록 설정'!A3:E42", "'자동 기록 설정'!G3:H22",
 			"'2026년 예산'!D1:F100", "'자동이체 내역'!A1:J77", "'설정 기록'!A2:E"
 		]);
 		expect(budgetTab(2026)).toBe('2026년 예산');

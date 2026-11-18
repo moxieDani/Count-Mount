@@ -98,7 +98,7 @@ describe('설정 경로', () => {
 		before: [['3. 생활비', 500000, '', '', '', '', '', '', '', '메모']], after: [['3. 생활비', 500000, '', '', '', '', '', '', '', '새 메모']]
 	};
 	const ROW_FORMULAS = [['3. 생활비', '=B74', '', '', '', '', '', '', '', '메모']];
-	const SAME = { range: '계정!G4:I4', before: [['기순', '', '']], after: [['기순', '', '']], label: '카드 · 기순 · 기순_롯데' };
+	const SAME = { range: '계정!H4:J4', before: [['기순', '', '']], after: [['기순', '', '']], label: '카드 · 기순 · 기순_롯데' };
 
 	it('바뀐 칸만 쓰고, 바뀐 칸이 없는 쓰기는 쓰지도 기록하지도 않는다', async () => {
 		const calls = stubGoogle({ read: [ROW.before, SAME.before], formulas: [ROW_FORMULAS, SAME.before] });

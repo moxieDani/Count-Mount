@@ -40,22 +40,22 @@ describe('바꾸기 계산', () => {
 	it('구분선 자리는 건너뜀', () => {
 		const cards = Object.fromEntries(Array.from({ length: 13 }, (_, i) => [4 + i, [`기순${i}`]]));
 		const writes = addCard(settings({ cards: { ...cards, 17: ['------'] } }), 'seoeun', { name: '서은_새카드', settle: '서은' });
-		expect(Array.isArray(writes) && writes[0].range).toBe('계정!F18:I18');   // 15번 자리(18줄), 14번 구분선 자리(17줄)는 건너뜀
+		expect(Array.isArray(writes) && writes[0].range).toBe('계정!G18:J18');   // 15번 자리(18줄), 14번 구분선 자리(17줄)는 건너뜀
 		const shared = addCard(settings(), 'shared', { name: '현금' });
-		expect(Array.isArray(shared) && shared[0].range).toBe('계정!F32:I32');
+		expect(Array.isArray(shared) && shared[0].range).toBe('계정!G32:J32');
 	});
 
 	it('새 카드는 이름·정산·실적·계좌와 상태·날짜, 상태 기본은 사용 중', () => {
 		const writes = addCard(settings(), 'kisoon', { name: '기순_우리', settle: '기순', start: '2026-03-15' });
 		expect(writes).toEqual([
-			{ range: '계정!F6:I6', before: [['', '', '', '']], after: [['기순_우리', '기순', '', '']], label: '카드 · 기순 · 기순_우리' },
-			{ range: '계정!L6:O6', before: [['', '', '', '']], after: [['사용 중', 46096, '', '']], label: '카드 · 기순 · 기순_우리 · 상태·날짜', dates: [1, 2, 3] }
+			{ range: '계정!G6:J6', before: [['', '', '', '']], after: [['기순_우리', '기순', '', '']], label: '카드 · 기순 · 기순_우리' },
+			{ range: '계정!M6:P6', before: [['', '', '', '']], after: [['사용 중', 46096, '', '']], label: '카드 · 기순 · 기순_우리 · 상태·날짜', dates: [1, 2, 3] }
 		]);
 	});
 
 	it('카드 이름은 고칠 수 없음', () => {
 		const writes = updateCard(settings(), 1, { name: '바꾼이름', status: '해지', cancel: '2026-03-15' } as never);
-		expect(Array.isArray(writes) && writes.map(w => w.range)).toEqual(['계정!G4:I4', '계정!L4:O4']);
+		expect(Array.isArray(writes) && writes.map(w => w.range)).toEqual(['계정!H4:J4', '계정!M4:P4']);
 		expect(JSON.stringify(writes)).not.toContain('바꾼이름');
 	});
 
