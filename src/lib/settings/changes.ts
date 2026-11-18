@@ -18,7 +18,7 @@ export type Cell = string | number | boolean;
 export type CellWrite = { range: string; before: Cell[][]; after: Cell[][]; label: string; dates?: number[]; formula?: boolean };
 export type Result = CellWrite[] | { error: string };
 export type CardFields = {
-	name?: string; group?: GroupKey; settle?: string; perf?: string; account?: string;
+	name?: string; title?: string; group?: GroupKey; settle?: string; perf?: string; account?: string;
 	status?: string; start?: string | null; expiry?: string | null; cancel?: string | null;
 };
 
@@ -74,16 +74,16 @@ export function setStopDate(s: YearSettings, row: number, date: string | null): 
 	return [{ range: `${ACCOUNT_TAB}!E${row}`, before: [[dateCell(c.stop)]], after: [[dateCell(date)]], label: `지출 분류 · ${c.name} · 그만 쓴 날`, dates: [0] }];
 }
 
-type CardValues = { name: string; owner: string; settle: string; perf: string; account: string;
+type CardValues = { name: string; title: string; owner: string; settle: string; perf: string; account: string;
 	status: string; start: string | null; expiry: string | null; cancel: string | null };
 
-/** 카드 한 줄 쓰기: G~K(이름·명의·정산·실적·계좌, 고칠 때는 이름 빼고 H~K)와 N~Q(상태·날짜) */
+/** 카드 한 줄 쓰기: G~L(결제방식 이름·카드 이름·명의·정산·실적·계좌, 고칠 때는 결제방식 이름 빼고 H~L)와 O~R(상태·날짜) */
 function cardWrites(row: number, label: string, before: { main: Cell[]; state: Cell[] }, f: CardValues, withName: boolean): CellWrite[] {
 	const main: CellWrite = withName
-		? { range: `${ACCOUNT_TAB}!G${row}:K${row}`, before: [before.main], after: [[f.name, f.owner, f.settle, f.perf, f.account]], label }
-		: { range: `${ACCOUNT_TAB}!H${row}:K${row}`, before: [before.main.slice(1)], after: [[f.owner, f.settle, f.perf, f.account]], label };
+		? { range: `${ACCOUNT_TAB}!G${row}:L${row}`, before: [before.main], after: [[f.name, f.title, f.owner, f.settle, f.perf, f.account]], label }
+		: { range: `${ACCOUNT_TAB}!H${row}:L${row}`, before: [before.main.slice(1)], after: [[f.title, f.owner, f.settle, f.perf, f.account]], label };
 	return [main, {
-		range: `${ACCOUNT_TAB}!N${row}:Q${row}`, before: [before.state],
+		range: `${ACCOUNT_TAB}!O${row}:R${row}`, before: [before.state],
 		after: [[f.status, dateCell(f.start), dateCell(f.expiry), dateCell(f.cancel)]], label: `${label} · 상태·날짜`, dates: [1, 2, 3]
 	}];
 }
@@ -96,24 +96,24 @@ export function addCard(s: YearSettings, group: GroupKey, fields: CardFields): R
 	const first = s.cards.find(c => c.group === group && c.name);
 	const slot = (first && s.cards.find(c => c.slot >= first.slot && isEmptySlot(c))) ?? s.cards.find(isEmptySlot);
 	if (!slot) return { error: FULL };
-	const before = { main: [slot.name, slot.owner, slot.settle, slot.perf, slot.account],
+	const before = { main: [slot.name, slot.title, slot.owner, slot.settle, slot.perf, slot.account],
 		state: [slot.status, dateCell(slot.start), dateCell(slot.expiry), dateCell(slot.cancel)] };
 	return cardWrites(slot.row, `카드 · ${ownerName(group)} · ${name}`, before, {
-		name, owner: ownerName(group), settle: fields.settle ?? '', perf: fields.perf ?? '', account: fields.account ?? '',
+		name, title: fields.title ?? '', owner: ownerName(group), settle: fields.settle ?? '', perf: fields.perf ?? '', account: fields.account ?? '',
 		status: fields.status || '사용 중', start: fields.start ?? null, expiry: fields.expiry ?? null, cancel: fields.cancel ?? null
 	}, true);
 }
 
-/** 카드 고치기: 이름(G) 말고 명의·정산·실적·계좌·상태·날짜. */
+/** 카드 고치기: 결제방식 이름(G) 말고 카드 이름·명의·정산·실적·계좌·상태·날짜. */
 export function updateCard(s: YearSettings, slot: number, fields: Omit<CardFields, 'name'>): Result {
 	const card = s.cards.find(c => c.slot === slot && c.name);
 	if (!card) return { error: '카드가 없습니다' };
-	const before = { main: [card.name, card.owner, card.settle, card.perf, card.account],
+	const before = { main: [card.name, card.title, card.owner, card.settle, card.perf, card.account],
 		state: [card.status, dateCell(card.start), dateCell(card.expiry), dateCell(card.cancel)] };
 	const pick = <T>(v: T | undefined, cur: T) => (v === undefined ? cur : v);
 	const who = card.group ? ownerName(card.group) : card.owner || '명의 없음';
 	return cardWrites(card.row, `카드 · ${who} · ${card.name}`, before, {
-		name: card.name, owner: fields.group ? ownerName(fields.group) : card.owner, settle: pick(fields.settle, card.settle), perf: pick(fields.perf, card.perf), account: pick(fields.account, card.account),
+		name: card.name, title: pick(fields.title, card.title), owner: fields.group ? ownerName(fields.group) : card.owner, settle: pick(fields.settle, card.settle), perf: pick(fields.perf, card.perf), account: pick(fields.account, card.account),
 		status: pick(fields.status, card.status), start: pick(fields.start, card.start), expiry: pick(fields.expiry, card.expiry),
 		cancel: pick(fields.cancel, card.cancel)
 	}, false);

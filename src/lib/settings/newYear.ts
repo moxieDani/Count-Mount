@@ -47,18 +47,18 @@ export function planNewYear(last: YearSettings, year: number): CellWrite[] {
 	}
 
 	// 카드: 명의 차례(기순, 서은, 기순·서은, 명의 없음)로 남은 카드를 맨 위부터. 구분선 줄은 없다 (2026-11-18)
-	const main: Cell[][] = Array.from({ length: CARD_SLOTS }, () => ['', '', '', '', '']);
+	const main: Cell[][] = Array.from({ length: CARD_SLOTS }, () => ['', '', '', '', '', '']);
 	const state: Cell[][] = Array.from({ length: CARD_SLOTS }, () => ['', '', '', '']);
 	const removedCards = new Set<string>();
 	const named = last.cards.filter(c => c.name && !/^-+$/.test(c.name));   // 옛 구분선 줄은 가져오지 않는다
 	named.filter(c => before(cardEnd(c), cutoff)).forEach(c => removedCards.add(c.name));
 	const keptCards = [...CARD_OWNERS.map(o => o.key), null].flatMap(g => named.filter(c => c.group === g && !before(cardEnd(c), cutoff)));
 	keptCards.forEach((c, i) => {
-		main[i] = [c.name, c.group ? ownerName(c.group) : c.owner, c.settle, c.perf, c.account];
+		main[i] = [c.name, c.title, c.group ? ownerName(c.group) : c.owner, c.settle, c.perf, c.account];
 		state[i] = [c.status, dateCell(c.start), dateCell(c.expiry), dateCell(c.cancel)];
 	});
-	out.push(write(`${ACCOUNT_TAB}!G4:K33`, main, '새해 · 카드'));
-	out.push(write(`${ACCOUNT_TAB}!N4:Q33`, state, '새해 · 카드 상태·날짜', [1, 2, 3]));
+	out.push(write(`${ACCOUNT_TAB}!G4:L33`, main, '새해 · 카드'));
+	out.push(write(`${ACCOUNT_TAB}!O4:R33`, state, '새해 · 카드 상태·날짜', [1, 2, 3]));
 
 	// 카드 알림 연결: 뺀 카드의 줄은 빼고 앞줄부터
 	const alerts = last.alerts.filter(a => !removedCards.has(a.method))

@@ -6,13 +6,13 @@ import {
 
 export type Category = { section: SectionKey; row: number; group: string; name: string; stop: string | null };
 export type Card = {
-	group: GroupKey | null; owner: string; slot: number; row: number; name: string; settle: string; perf: string; account: string;
+	group: GroupKey | null; owner: string; slot: number; row: number; name: string; title: string; settle: string; perf: string; account: string;
 	status: string; start: string | null; expiry: string | null; cancel: string | null;
 };
 /** 새 카드를 넣을 수 있는 빈 자리: 이름뿐 아니라 그 줄 카드 칸(명의·정산·실적·계좌·상태·날짜)이 모두 비었다.
  *  옛 구분선 줄에 남은 계좌·메모 같은 글을 새 카드가 덮지 않게 한다 (2026-11-18) */
 export const isEmptySlot = (c: Card): boolean =>
-	![c.name, c.owner, c.settle, c.perf, c.account, c.status].some(Boolean) && !c.start && !c.expiry && !c.cancel;
+	![c.name, c.title, c.owner, c.settle, c.perf, c.account, c.status].some(Boolean) && !c.start && !c.expiry && !c.cancel;
 
 export type CardAlert = { row: number; method: string; company: string; front: string; back: string; smsAmount: number | null };
 export type FixedRule = { row: number; label: string; text: string };
@@ -73,13 +73,13 @@ export function parseSettings(valueRanges: unknown[][][], year: number, formulaR
 			return { section: sec.key, row, group: text(at(account, i, 0)), name: text(at(account, i, 1)), stop: dateOf(at(account, i, 2)) };
 		}));
 
-	// 카드 30자리 (G 이름, H 명의, I 정산, J 실적, K 연결된 계좌, N~Q 상태·날짜). 묶음은 명의로 (2026-11-18)
+	// 카드 30자리 (G 결제방식 이름, H 카드 이름, I 명의, J 정산, K 실적, L 연결된 계좌, O~R 상태·날짜). 묶음은 명의로 (2026-11-18)
 	const cards: Card[] = Array.from({ length: CARD_SLOTS }, (_, i) => {
-		const slot = i + 1, owner = text(at(cardRows, i, 1));
+		const slot = i + 1, owner = text(at(cardRows, i, 2));
 		return {
-			group: ownerGroup(owner), owner, slot, row: slotRow(slot), name: text(at(cardRows, i, 0)), settle: text(at(cardRows, i, 2)),
-			perf: text(at(cardRows, i, 3)), account: text(at(cardRows, i, 4)), status: text(at(cardRows, i, 7)),
-			start: dateOf(at(cardRows, i, 8)), expiry: dateOf(at(cardRows, i, 9)), cancel: dateOf(at(cardRows, i, 10))
+			group: ownerGroup(owner), owner, slot, row: slotRow(slot), name: text(at(cardRows, i, 0)), title: text(at(cardRows, i, 1)),
+			settle: text(at(cardRows, i, 3)), perf: text(at(cardRows, i, 4)), account: text(at(cardRows, i, 5)), status: text(at(cardRows, i, 8)),
+			start: dateOf(at(cardRows, i, 9)), expiry: dateOf(at(cardRows, i, 10)), cancel: dateOf(at(cardRows, i, 11))
 		};
 	});
 

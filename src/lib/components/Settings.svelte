@@ -183,7 +183,7 @@
 	}
 
 	// ── 카드 ──
-	type CardDraft = { group: GroupKey | ''; settle: string; perf: string; account: string; status: string; start: string; expiry: string; cancel: string };
+	type CardDraft = { title: string; group: GroupKey | ''; settle: string; perf: string; account: string; status: string; start: string; expiry: string; cancel: string };
 	let cardDraft = $state<Record<number, CardDraft>>({});
 	let newCard = $state<Record<string, CardDraft & { name: string }>>({});
 	let newAlert = $state<Record<string, { company: string; front: string; back: string; sms: string }>>({});
@@ -193,13 +193,13 @@
 	const OWNER_SECTIONS: { key: GroupKey | null; name: string }[] = [...CARD_OWNERS, { key: null, name: '명의 없음' }];
 	const alertsOf = (name: string) => (settings?.alerts ?? []).filter(a => a.method === name);
 	const orphanAlerts = () => (settings?.alerts ?? []).filter(a => !(settings?.cards ?? []).some(c => c.name && c.name === a.method));
-	const emptyCard = (): CardDraft => ({ group: '', settle: '', perf: '', account: '', status: '사용 중', start: '', expiry: '', cancel: '' });
+	const emptyCard = (): CardDraft => ({ title: '', group: '', settle: '', perf: '', account: '', status: '사용 중', start: '', expiry: '', cancel: '' });
 
 	function submitCardUpdate(card: Card) {
 		if (!settings) return;
 		const d = cardDraft[card.slot];
 		propose(updateCard(settings, card.slot, {
-			group: d.group || undefined, settle: d.settle, perf: d.perf, account: d.account, status: d.status,
+			title: d.title, group: d.group || undefined, settle: d.settle, perf: d.perf, account: d.account, status: d.status,
 			start: d.start || null, expiry: d.expiry || null, cancel: d.cancel || null
 		}));
 	}
@@ -245,7 +245,7 @@
 		newCategory = Object.fromEntries(SECTIONS.map(s => [s.key, { group: groupsOf(s.key)[0] ?? '__new', newGroup: '', name: '' }]));
 		stopDraft = Object.fromEntries(settings.categories.filter(c => c.name).map(c => [c.row, c.stop ?? '']));
 		cardDraft = Object.fromEntries(settings.cards.filter(c => c.name).map(c => [c.slot, {
-			group: c.group ?? '', settle: c.settle, perf: c.perf, account: c.account, status: c.status || '사용 중',
+			title: c.title, group: c.group ?? '', settle: c.settle, perf: c.perf, account: c.account, status: c.status || '사용 중',
 			start: c.start ?? '', expiry: c.expiry ?? '', cancel: c.cancel ?? ''
 		}]));
 		newCard = Object.fromEntries(CARD_OWNERS.map(g => [g.key, { ...emptyCard(), name: '' }]));
@@ -339,8 +339,9 @@
 					{#each cardsOf(g.key) as c (c.slot)}
 						{#if cardDraft[c.slot]}
 							<div class="card">
-								<strong>{c.name}</strong>
+								<strong>{c.name}{c.title ? ` · ${c.title}` : ''}</strong>
 								<div class="grid">
+									<label>카드 이름 <input placeholder="예: SKT우리카드" bind:value={cardDraft[c.slot].title} /></label>
 									<label>명의 <select bind:value={cardDraft[c.slot].group}>
 										{#if !c.group}<option value="">고르세요</option>{/if}
 										{#each CARD_OWNERS as o}<option value={o.key}>{o.name}</option>{/each}
@@ -391,7 +392,8 @@
 						<div class="card new">
 							<strong>새 카드 ({g.name})</strong>
 							<div class="grid">
-								<label>이름 <input bind:value={newCard[key].name} /></label>
+								<label>결제방식 이름 <input placeholder="예: 기순_우리SKT" bind:value={newCard[key].name} /></label>
+								<label>카드 이름 <input placeholder="예: SKT우리카드" bind:value={newCard[key].title} /></label>
 								<label>정산 <input bind:value={newCard[key].settle} /></label>
 								<label>실적 <input bind:value={newCard[key].perf} /></label>
 								<label>연결된 계좌 <input bind:value={newCard[key].account} /></label>

@@ -26,9 +26,9 @@ export const ownerGroup = (owner: string): GroupKey | null => CARD_OWNERS.find(o
 export const ownerName = (key: GroupKey): string => CARD_OWNERS.find(o => o.key === key)?.name ?? key;
 export const slotRow = (slot: number) => slot + 3;
 
-/** 카드 줄 칸 (계정 G~Q): G 이름, H 명의, I 정산, J 실적, K 연결된 계좌, L·M 메모, N 상태, O 시작일, P 만료일, Q 해지일.
- *  F는 가계부 계정 표(B~E, E 그만 쓴 날)와 띄우는 빈 열 (2026-11-18) */
-export const CARD_COLUMNS = { name: 'G', owner: 'H', settle: 'I', perf: 'J', account: 'K', status: 'N', start: 'O', expiry: 'P', cancel: 'Q' } as const;
+/** 카드 줄 칸 (계정 G~R): G 결제방식 이름, H 카드 이름(실제 카드 이름), I 명의, J 정산, K 실적, L 연결된 계좌, M·N 메모,
+ *  O 상태, P 시작일, Q 만료일, R 해지일. F는 가계부 계정 표(B~E, E 그만 쓴 날)와 띄우는 빈 열 (2026-11-18) */
+export const CARD_COLUMNS = { name: 'G', title: 'H', owner: 'I', settle: 'J', perf: 'K', account: 'L', status: 'O', start: 'P', expiry: 'Q', cancel: 'R' } as const;
 export const CARD_STATUSES = ['사용 중', '해지', '만료'];
 export const CARD_COMPANIES = ['KB국민', '롯데', '삼성', '우리', '현대', '신한', '하나', 'NH농협', '씨티', 'IBK', 'BC'];
 
@@ -76,7 +76,7 @@ export const FORMULA_RANGES = 6;
 export function settingsRanges(year: number): string[] {
 	return [
 		`${ACCOUNT_TAB}!C4:E88`,
-		`${ACCOUNT_TAB}!G4:Q33`,
+		`${ACCOUNT_TAB}!G4:R33`,
 		`'${AUTO_TAB}'!A${ALERT_ROWS.first}:E${ALERT_ROWS.last}`,
 		`'${AUTO_TAB}'!G${FIXED_ROWS.first}:H${FIXED_ROWS.last}`,
 		`'${budgetTab(year)}'!D1:F100`,

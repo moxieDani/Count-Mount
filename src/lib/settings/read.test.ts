@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { budgetTab, settingsRanges } from './layout';
 import { dateToSerial, parseSettings, serialToDate } from './read';
 
-/** settingsRanges 차례대로: 계정 C4:E88, 계정 G4:Q33, 알림 A3:E42, 고정비 G3:H22, 예산 D1:F100, 자동이체 A1:J77, 설정 기록 A2:E */
+/** settingsRanges 차례대로: 계정 C4:E88, 계정 G4:R33, 알림 A3:E42, 고정비 G3:H22, 예산 D1:F100, 자동이체 A1:J77, 설정 기록 A2:E */
 function ranges(over: Partial<Record<number, unknown[][]>> = {}): unknown[][][] {
 	return Array.from({ length: 7 }, (_, i) => over[i] ?? []);
 }
@@ -15,7 +15,7 @@ function rowsAt(first: number, entries: Record<number, unknown[]>): unknown[][] 
 describe('설정 읽기', () => {
 	it('범위는 한 번의 묶음 요청으로', () => {
 		expect(settingsRanges(2026)).toEqual([
-			'계정!C4:E88', '계정!G4:Q33', "'자동 기록 설정'!A3:E42", "'자동 기록 설정'!G3:H22",
+			'계정!C4:E88', '계정!G4:R33', "'자동 기록 설정'!A3:E42", "'자동 기록 설정'!G3:H22",
 			"'2026년 예산'!D1:F100", "'자동이체 내역'!A1:J77", "'설정 기록'!A2:E"
 		]);
 		expect(budgetTab(2026)).toBe('2026년 예산');
@@ -31,10 +31,10 @@ describe('설정 읽기', () => {
 		expect(s.categories.filter(c => c.section === 'saving')).toHaveLength(20);
 	});
 
-	it('카드는 30자리, 묶음은 줄 자리가 아니라 명의(H)로 (2026-11-18)', () => {
+	it('카드는 30자리, 묶음은 줄 자리가 아니라 명의(I)로, H는 카드 이름 (2026-11-18)', () => {
 		const cards = rowsAt(4, {
-			4: ['기순_롯데', '기순', '기순', '30만', '우리', '메모', '', '사용 중', 45000, 47000, ''],
-			17: ['서은_새', '서은'], 18: ['서은_국민', '서은'], 20: ['모름'], 32: ['현금/이체', '기순, 서은'], 33: ['공용', '기순,서은 ']
+			4: ['기순_롯데', '롯데카드', '기순', '기순', '30만', '우리', '메모', '', '사용 중', 45000, 47000, ''],
+			17: ['서은_새', '', '서은'], 18: ['서은_국민', '', '서은'], 20: ['모름'], 32: ['현금/이체', '', '기순, 서은'], 33: ['공용', '', '기순,서은 ']
 		});
 		const s = parseSettings(ranges({ 1: cards }), 2026);
 		expect(s.cards.map(c => c.slot)).toEqual(Array.from({ length: 30 }, (_, i) => i + 1));
@@ -42,7 +42,7 @@ describe('설정 읽기', () => {
 		expect(s.cards.filter(c => c.group === 'seoeun').map(c => c.slot)).toEqual([14, 15]);
 		expect(s.cards.filter(c => c.group === 'shared').map(c => c.slot)).toEqual([29, 30]);
 		expect(s.cards.find(c => c.slot === 17)).toMatchObject({ name: '모름', owner: '', group: null });
-		expect(s.cards[0]).toEqual({ group: 'kisoon', owner: '기순', slot: 1, row: 4, name: '기순_롯데', settle: '기순', perf: '30만', account: '우리',
+		expect(s.cards[0]).toEqual({ group: 'kisoon', owner: '기순', slot: 1, row: 4, name: '기순_롯데', title: '롯데카드', settle: '기순', perf: '30만', account: '우리',
 			status: '사용 중', start: serialToDate(45000), expiry: serialToDate(47000), cancel: null });
 		expect(s.cards.find(c => c.slot === 15)).toMatchObject({ group: 'seoeun', row: 18, name: '서은_국민' });
 	});
