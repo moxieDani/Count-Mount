@@ -1,11 +1,13 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import { FULL_LIST_RANGE, monthListRange } from '$lib/ledger/paymentMethods';
+import { readMonthOrFull } from '$lib/server/monthList';
 
-// Simple in-memory cache for payment method options
+// Simple in-memory cache for payment method options (문서·탭마다 따로)
 let paymentMethodsCache: { [key: string]: { data: string[], timestamp: number } } = {};
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
-export const GET: RequestHandler = async ({ params, request }) => {
+export const GET: RequestHandler = async ({ params, request, url }) => {
 	const { spreadsheetId } = params;
 	const authHeader = request.headers.get('authorization');
 	
@@ -14,7 +16,8 @@ export const GET: RequestHandler = async ({ params, request }) => {
 	}
 	
 	const accessToken = authHeader.substring(7);
-	const cacheKey = `${spreadsheetId}_payment_methods`;
+	const sheet = url.searchParams.get('sheet');
+	const cacheKey = `${spreadsheetId}_${sheet ?? ''}_payment_methods`;
 	const now = Date.now();
 	
 	// Check cache first
@@ -26,48 +29,29 @@ export const GET: RequestHandler = async ({ params, request }) => {
 	}
 	
 	try {
-		// Fetch payment method options from '계정' sheet F4:F21
-		const range = '계정!F4:F21';
-		const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(range)}`;
-		
-		const response = await fetch(url, {
-			headers: {
-				'Authorization': `Bearer ${accessToken}`,
-				'Content-Type': 'application/json'
-			}
-		});
-		
-		if (!response.ok) {
-			const errorText = await response.text();
+		// 그 달 탭의 '이달 쓸 카드'. 비었거나 읽지 못하면(AH열이 없는 옛 문서 등) 계정 탭 전체 목록
+		const got = await readMonthOrFull(spreadsheetId, accessToken, sheet ? monthListRange(sheet) : null, FULL_LIST_RANGE);
+		if (!got.ok) {
+			const errorText = await got.response.text();
 			console.error('Google Sheets API error:', {
-				status: response.status,
-				statusText: response.statusText,
+				status: got.response.status,
+				statusText: got.response.statusText,
 				error: errorText
 			});
-			
 			return json({
-				error: `Failed to fetch payment methods: ${response.statusText}`,
+				error: `Failed to fetch payment methods: ${got.response.statusText}`,
 				details: errorText
-			}, { status: response.status });
+			}, { status: got.response.status });
 		}
-		
-		const data = await response.json();
-		const values = data.values || [];
-		
-		// Extract non-empty payment method options
-		const accounts = values
-			.flat()
-			.filter((value: any) => value && value.toString().trim() !== '')
-			.map((value: any) => value.toString().trim());
 		
 		// Cache the results
 		paymentMethodsCache[cacheKey] = {
-			data: accounts,
+			data: got.values,
 			timestamp: now
 		};
 		
 		return json({
-			accounts,
+			accounts: got.values,
 			cached: false
 		});
 		

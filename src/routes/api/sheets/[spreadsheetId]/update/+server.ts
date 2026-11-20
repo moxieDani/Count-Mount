@@ -1,35 +1,9 @@
 import { json } from '@sveltejs/kit';
 import { google } from 'googleapis';
 import type { RequestHandler } from './$types';
+import { sortRange } from '$lib/ledger/rows';
 
 const sheets = google.sheets('v4');
-
-// Helper function to convert A1 notation to a GridRange object
-function a1ToGridRange(a1Range: string, sheetId: number) {
-    const [start, end] = a1Range.split(':');
-    
-    const startColMatch = start.match(/[A-Z]+/);
-    const startRowMatch = start.match(/[0-9]+/);
-    const endColMatch = end.match(/[A-Z]+/);
-    const endRowMatch = end.match(/[0-9]+/);
-
-    if (!startColMatch || !startRowMatch || !endColMatch || !endRowMatch) {
-        throw new Error(`Invalid A1 notation: ${a1Range}`);
-    }
-
-    const startColumnIndex = colA1ToIndex(startColMatch[0]);
-    const startRowIndex = parseInt(startRowMatch[0], 10) - 1;
-    const endColumnIndex = colA1ToIndex(endColMatch[0]) + 1;
-    const endRowIndex = parseInt(endRowMatch[0], 10);
-
-    return {
-        sheetId,
-        startRowIndex,
-        endRowIndex,
-        startColumnIndex,
-        endColumnIndex
-    };
-}
 
 // Helper function to convert a column letter (A, B, C) to a zero-based index
 function colA1ToIndex(colA1: string): number {
@@ -83,9 +57,9 @@ export const POST: RequestHandler = async ({ params, request }) => {
                 const sheetMeta = await sheets.spreadsheets.get({ auth, spreadsheetId, fields: 'sheets.properties.title,sheets.properties.sheetId' });
                 const sheet = sheetMeta.data.sheets?.find(s => s.properties?.title === sheetName);
 
-                if (sheet?.properties?.sheetId !== undefined) {
+                if (typeof sheet?.properties?.sheetId === 'number') {
                     const sheetId = sheet.properties.sheetId;
-                    const sortRange = a1ToGridRange(dataRange, sheetId);
+                    // dataRange는 "정렬하라"는 표시로만 본다: 범위는 늘 Y27:AE126 (옛 화면이 Y~AD를 보내도 AE가 줄과 함께)
                     const sortColumnIndex = colA1ToIndex('Y'); // Sort by column Y
 
                     await sheets.spreadsheets.batchUpdate({
@@ -94,7 +68,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
                         requestBody: {
                             requests: [{
                                 sortRange: {
-                                    range: sortRange,
+                                    range: sortRange(sheetId),
                                     sortSpecs: [{
                                         dimensionIndex: sortColumnIndex,
                                         sortOrder: 'ASCENDING'

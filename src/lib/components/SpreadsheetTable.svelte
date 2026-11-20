@@ -5,6 +5,7 @@
 	import EditRowModal from './EditRowModal.svelte';
 	import CreateRowModal from './CreateRowModal.svelte';
 	import SettlementBadge from './SettlementBadge.svelte';
+	import { CLEARED_ROW, clearRowRange } from '$lib/ledger/rows';
 
 	// Google Picker API 타입 정의
 	const googlePicker: any = typeof window !== 'undefined' ? (window as any).google : null;
@@ -240,10 +241,10 @@
 
 		isModalLoading = true;
 		try {
-			// 빈 데이터로 행 전체를 업데이트
+			// 빈 데이터로 행 전체(Y~AE, 기록한 곳 포함)를 업데이트
 			const actualRowIndex = rowIndex + 27; // Y27부터 시작하므로 +27
-			const updateRange = `${tableData.metadata.sheetName}!Y${actualRowIndex}:AD${actualRowIndex}`;
-			const emptyRowData = new Array(selectedRowData.length).fill('');
+			const updateRange = clearRowRange(tableData.metadata.sheetName, actualRowIndex);
+			const emptyRowData = CLEARED_ROW;
 			
 			const response = await fetch(`/api/sheets/${spreadsheetId}/update`, {
 				method: 'POST',
@@ -914,6 +915,7 @@
 	currentMonth={currentMonth}
 	spreadsheetId={spreadsheetId}
 	accessToken={session?.accessToken}
+	sheetName={tableData?.metadata?.sheetName ?? null}
 	on:close={closeEditModal}
 	on:save={handleModalSave}
 	on:delete={handleModalDelete}
@@ -928,6 +930,7 @@
 	currentMonth={currentMonth}
 	spreadsheetId={spreadsheetId}
 	accessToken={session?.accessToken}
+	sheetName={tableData?.metadata?.sheetName ?? null}
 	on:close={closeCreateModal}
 	on:save={handleCreateRow}
 />

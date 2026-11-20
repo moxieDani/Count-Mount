@@ -8,78 +8,30 @@
 	import SpreadsheetTable from '$lib/components/SpreadsheetTable.svelte'
 	import Analytics from '$lib/components/Analytics.svelte'
 	import CardUsage from '$lib/components/CardUsage.svelte'
+	import Settings from '$lib/components/Settings.svelte'
 	import PullToRefresh from '$lib/components/PullToRefresh.svelte'
 
 	let session = $derived(page.data.session);
 	let currentSpreadsheetId = $state<string>('');
-	let view = $state<'records' | 'analytics' | 'cards'>('records');
+	let view = $state<'records' | 'analytics' | 'cards' | 'settings'>('records');
 	let isLoading = $state(false);
 	let error = $state('');
 	let isAuthError = $state(false);
 
 	class AuthExpiredError extends Error {}
 
-	// 자동 스프레드시트 찾기 함수
+	// 올해 가계부 찾기: 서버가 이름이 정확히 같은 문서만 찾는다(HOUSEHOLD_DOC_NAME, 기본 "{year} 가계부")
 	async function findCurrentYearSpreadsheet(): Promise<string | null> {
 		if (!session?.accessToken) return null;
-
+		const currentYear = new Date().getFullYear();
 		try {
-			const currentYear = new Date().getFullYear();
-			console.log(`Searching for ${currentYear} spreadsheet...`);
-			
-			// 여러 가지 패턴으로 검색
-			const searchPatterns = [
-				`name contains '${currentYear} 가계부'`,
-				`name contains '${currentYear}가계부'`,
-				`name contains '가계부 ${currentYear}'`,
-				`name:'${currentYear} 가계부'`,
-				`name:'${currentYear}가계부'`,
-				`name contains '${currentYear}'`
-			];
-			
-			// 각 패턴으로 검색 (공유 드라이브 포함)
-			for (const pattern of searchPatterns) {
-				const searchQuery = `${pattern} and mimeType='application/vnd.google-apps.spreadsheet'`;
-				
-				// 공유 드라이브 포함 검색
-				const searchUrl = `https://www.googleapis.com/drive/v3/files?` + 
-					`q=${encodeURIComponent(searchQuery)}&` +
-					`supportsAllDrives=true&` +
-					`includeItemsFromAllDrives=true&` +
-					`corpora=allDrives&` +
-					`orderBy=modifiedTime desc`;
-
-				const response = await fetch(searchUrl, {
-					headers: {
-						'Authorization': `Bearer ${session.accessToken}`
-					}
-				});
-
-				if (response.status === 401) {
-					throw new AuthExpiredError();
-				}
-
-				if (response.ok) {
-					const data = await response.json();
-					const files = data.files || [];
-					
-					// 검색 결과에서 가장 적합한 파일 찾기
-					for (const file of files) {
-						console.log(`Checking file: ${file.name} (ID: ${file.id})`);
-						if (file.name && (
-							file.name.includes(`${currentYear} 가계부`) ||
-							file.name.includes(`${currentYear}가계부`) ||
-							file.name.includes(`가계부 ${currentYear}`) ||
-							(file.name.includes(currentYear.toString()) && file.name.includes('가계부'))
-						)) {
-							console.log(`Found matching spreadsheet: ${file.name}`);
-							return file.id;
-						}
-					}
-				}
-			}
-
-			return null;
+			const response = await fetch(`/api/ledger-document?year=${currentYear}`, {
+				headers: { Authorization: `Bearer ${session.accessToken}` }
+			});
+			if (response.status === 401) throw new AuthExpiredError();
+			if (!response.ok) return null;
+			const data = await response.json();
+			return data.spreadsheetId ?? null;
 		} catch (err) {
 			if (err instanceof AuthExpiredError) throw err;
 			console.error('Error searching for current year spreadsheet:', err);
@@ -130,9 +82,10 @@
 	let recordsView = $state<Refreshable>();
 	let analyticsView = $state<Refreshable>();
 	let cardsView = $state<Refreshable>();
+	let settingsView = $state<Refreshable>();
 	function refreshView() {
 		if (!currentSpreadsheetId) return retry();
-		const current = view === 'analytics' ? analyticsView : view === 'cards' ? cardsView : recordsView;
+		const current = view === 'analytics' ? analyticsView : view === 'cards' ? cardsView : view === 'settings' ? settingsView : recordsView;
 		return current?.refresh();
 	}
 
@@ -174,8 +127,8 @@
 					{/if}
 				</div>
 			{:else if currentSpreadsheetId}
-				<nav class="view-nav" aria-label="화면 선택"><button class:active={view === 'records'} onclick={() => view = 'records'}>지출 기록</button><button class:active={view === 'analytics'} onclick={() => view = 'analytics'}>지출 분석</button><button class:active={view === 'cards'} onclick={() => view = 'cards'}>카드 실적</button></nav>
-				{#if view === 'analytics'}<Analytics bind:this={analyticsView} spreadsheetId={currentSpreadsheetId} />{:else if view === 'cards'}<CardUsage bind:this={cardsView} />{:else}<SpreadsheetTable
+				<nav class="view-nav" aria-label="화면 선택"><button class:active={view === 'records'} onclick={() => view = 'records'}>지출 기록</button><button class:active={view === 'analytics'} onclick={() => view = 'analytics'}>지출 분석</button><button class:active={view === 'cards'} onclick={() => view = 'cards'}>카드 실적</button><button class:active={view === 'settings'} onclick={() => view = 'settings'}>설정</button></nav>
+				{#if view === 'analytics'}<Analytics bind:this={analyticsView} spreadsheetId={currentSpreadsheetId} />{:else if view === 'cards'}<CardUsage bind:this={cardsView} />{:else if view === 'settings'}<Settings bind:this={settingsView} />{:else}<SpreadsheetTable
 					bind:this={recordsView}
 					spreadsheetId={currentSpreadsheetId}
 					range="Y27:AD126"

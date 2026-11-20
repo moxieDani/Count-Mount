@@ -57,13 +57,20 @@ describe('GET /api/card-usage', () => {
 		expect((await res.json()).docName).toBe('2027 테스트 카드사용내역');
 	});
 
-	it('있으면 N월 시트의 I1:J102 를 카드별로 묶어 12달로 돌려준다 (없는 달은 null)', async () => {
+	it('이름 틀에 두 자리 해 {yy}를 쓸 수 있다(작업본 시험용)', async () => {
+		env.CARD_USAGE_DOC_NAME = '[작업본] {yy}년 카드사용내역';
+		const calls = stubGoogle({});
+		await call('2026');
+		expect(calls[0]).toContain("name = '[작업본] 26년 카드사용내역'");
+	});
+
+	it('있으면 N월 시트의 J1:K102 를 카드별로 묶어 12달로 돌려준다 (없는 달은 null)', async () => {
 		const calls = stubGoogle({
 			files: [{ id: 'doc1', name: '2026 카드사용내역' }],
 			titles: ['요약', '10월', '11월'],
 			ranges: {
-				"'10월'!I1:J102": [['테스트카드A'], ['채울 실적금액', '0']],
-				"'11월'!I1:J102": [['테스트카드A'], ['채울 실적금액', '120,000']]
+				"'10월'!J1:K102": [['테스트카드A'], ['채울 실적금액', '0']],
+				"'11월'!J1:K102": [['테스트카드A'], ['채울 실적금액', '120,000']]
 			}
 		});
 		const body = await (await call()).json();

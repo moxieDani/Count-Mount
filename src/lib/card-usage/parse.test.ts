@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { cardBadges, parseCardUsage } from './parse';
 
-// 카드사용내역 월 시트의 I1:J102 를 Sheets API 로 읽은 모양.
-// 카드 이름 줄은 I:J 가 병합돼 J 값이 없다. 카드 이름·값은 가짜.
+// 카드사용내역 월 시트의 J1:K102 를 Sheets API 로 읽은 모양.
+// 카드 이름 줄은 J:K 가 병합돼 K 값이 없다. 카드 이름·값은 가짜.
 const ROWS = [
 	[],
 	['테스트카드A'],
@@ -69,6 +69,15 @@ describe('parseCardUsage', () => {
 		expect(card.items.map((i) => i.tone)).toEqual(['done', 'limit', 'bonus', 'done', 'bonus', null, null]);
 		const [later] = parseCardUsage([['테스트카드A'], ['채울 실적금액', '1,000'], ['남은 보너스 실적혜택 한도', '0']]);
 		expect(later.items.map((i) => i.tone)).toEqual(['spend', 'done']);
+	});
+
+	it('"채울 실적금액" 줄이 있으면 실적 배지는 그 값만 쓴다 (배달 실적 결제금액 같은 다른 실적 금액은 더하지 않는다, 2026-11-18)', () => {
+		const [lotte] = parseCardUsage([
+			['롯데카드(기순_롯데)'], ['채울 실적금액', '120,000'], ['남은 배달 실적 결제금액', '30,000'], ['남은 배달 실적혜택 한도', '5,000']
+		]);
+		expect(lotte.badges).toEqual([{ kind: 'spend', text: '실적까지 120,000원' }]);
+		const [done] = parseCardUsage([['롯데카드'], ['채울 실적금액', '0'], ['남은 배달 실적 결제금액', '30,000'], ['남은 배달 실적혜택 한도', '5,000']]);
+		expect(done.badges).toEqual([{ kind: 'limit', text: '한도 5,000원 남음' }]);
 	});
 
 	it('실적 금액도 실적 한도도 없으면 배지 없음', () => {

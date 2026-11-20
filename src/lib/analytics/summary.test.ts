@@ -27,4 +27,9 @@ describe('월별 지출 분석', () => {
  it('예산이 없는 계정은 미설정으로 표시한다', () => {
   expect(summarizeMonth(['계정','금액'], [['기타','100']], [], []).accounts[0].budget).toBeNull();
  });
+ it('81줄까지 있는 분류 표에서도 예산을 찾는다 (비고정 52~81줄)', () => {
+  const budgetRows = Array.from({ length: 55 }, () => Array.from({ length: 19 }, () => ''));
+  budgetRows[54][16] = '배달'; budgetRows[54][18] = '40,000';           // 81줄: Q 분류 이름, S 예산
+  expect(summarizeMonth(['계정','금액'], [['배달','50,000']], budgetRows, ['배달']).accounts[0]).toMatchObject({ budget: 40000, difference: 10000 });
+ });
 });

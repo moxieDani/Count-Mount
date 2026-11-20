@@ -1,5 +1,5 @@
-// 카드사용내역 월 시트의 I1:J102 를 카드별로 묶는다.
-// 시트 모양: I:J 병합 줄(J 값 없음) = 카드 이름, 그 아래 [항목 이름, 남은 값] 줄들.
+// 카드사용내역 월 시트의 J1:K102 (실적 칸, I는 빈 열) 를 카드별로 묶는다.
+// 시트 모양: J:K 병합 줄(K 값 없음) = 카드 이름, 그 아래 [항목 이름, 남은 값] 줄들.
 // 남은 값은 시트가 이미 계산해 두므로(0 아래로 내려가지 않음) 여기서는 읽기만 한다.
 
 // 배지와 항목 줄이 같은 색을 쓴다
@@ -62,10 +62,16 @@ function toneOf(label: string, value: number | null): Tone | null {
 	return isBonus(label) ? 'bonus' : roleOf(label);
 }
 
+// 카드 전체 실적은 "채울 실적금액" 줄. 이 줄이 있으면 실적 배지는 이 값만 쓴다 (배달 실적 결제금액처럼 조건이 붙은 실적은 더하지 않는다, 2026-11-18)
+const isMainSpend = (label: string) => label.replace(/\s+/g, '') === '채울실적금액';
+
 function statusOf(items: CardItem[]): CardStatus | null {
 	const roles = items.map((i) => roleOf(i.label));
+	const hasMain = items.some((i) => isMainSpend(i.label));
 	const sum = (role: Role) => {
-		const values = items.filter((_, k) => roles[k] === role).map((i) => Math.max(0, i.value ?? 0));
+		const values = items
+			.filter((i, k) => roles[k] === role && !(role === 'spend' && hasMain && !isMainSpend(i.label)))
+			.map((i) => Math.max(0, i.value ?? 0));
 		return values.length ? values.reduce((a, b) => a + b, 0) : null;
 	};
 	const status = { spend: sum('spend'), limit: sum('limit'), bonus: sum('bonus') };

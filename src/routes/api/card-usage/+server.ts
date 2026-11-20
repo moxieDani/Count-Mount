@@ -2,10 +2,11 @@ import { json } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
 import type { RequestHandler } from './$types';
 import { parseCardUsage } from '$lib/card-usage/parse';
+import { fillDocName } from '$lib/server/docName';
 
 // 문서 이름. 테스트 중에는 .env 에 CARD_USAGE_DOC_NAME="{year} 테스트 카드사용내역" 을 둔다.
 const DEFAULT_DOC_NAME = '{year} 카드사용내역';
-const RANGE = 'I1:J102';
+const RANGE = 'J1:K102';   // 실적 칸 (I는 거래 표와 띄우는 빈 열, 2026-11-18)
 
 const quoteName = (s: string) => `'${s.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`; // Drive 검색어
 const quoteSheet = (s: string) => `'${s.replace(/'/g, "''")}'`; // A1 표기
@@ -16,7 +17,7 @@ export const GET: RequestHandler = async ({ url, request }) => {
 	const year = url.searchParams.get('year') ?? '';
 	if (!/^\d{4}$/.test(year)) return json({ error: '년도가 올바르지 않습니다.' }, { status: 400 });
 
-	const docName = (env.CARD_USAGE_DOC_NAME || DEFAULT_DOC_NAME).replaceAll('{year}', year);
+	const docName = fillDocName(env.CARD_USAGE_DOC_NAME || DEFAULT_DOC_NAME, year);
 	const compact = docName.replace(/^(\d{4})\s+/, '$1'); // "2026카드사용내역" 도 찾는다
 	const names = [...new Set([docName, compact])].map((n) => `name = ${quoteName(n)}`).join(' or ');
 	const headers = { authorization };

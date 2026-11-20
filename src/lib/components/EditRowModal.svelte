@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { createEventDispatcher } from 'svelte';
 	import DatePicker from './DatePicker.svelte';
+	import { accountsUrl, listKey, paymentMethodsUrl, withCurrentValue } from '$lib/ledger/paymentMethods';
 	
 	const dispatch = createEventDispatcher();
 	
@@ -13,7 +14,8 @@
 		currentYear = new Date().getFullYear(),
 		currentMonth = new Date().getMonth() + 1,
 		spreadsheetId = null,
-		accessToken = null
+		accessToken = null,
+		sheetName = null
 	} = $props<{
 		isOpen: boolean;
 		headers: string[];
@@ -24,13 +26,24 @@
 		currentMonth?: number;
 		spreadsheetId?: string | null;
 		accessToken?: string | null;
+		sheetName?: string | null;   // 보고 있는 달 탭 이름: 그 달에 쓸 수 있는 결제방식만 받는다
 	}>();
 
 	let editedData = $state<string[]>([]);
 	let showDatePicker = $state<number | null>(null); // 어떤 필드의 날짜 선택기를 보여줄지
-	let paymentMethodOptions = $state<string[]>([]); // 결제방식 옵션들
+	let paymentMethodList = $state<string[]>([]); // 읽어 온 그 달 결제방식 목록
+	let paymentMethodKey = $state<string | undefined>(undefined); // 결제방식을 읽은 문서·달 탭 (listKey, undefined = 아직 안 읽음)
+	// 보이는 목록: 연 줄의 원래 결제방식이 그 달 목록에 없으면 맨 앞에 (값을 바꿔도 원래 값으로 되돌릴 수 있게)
+	const paymentMethodOptions = $derived(
+		withCurrentValue(paymentMethodList, rowData[headers.findIndex((header: string) => isPaymentMethodField(header))])
+	);
 	let isLoadingPaymentMethods = $state(false); // 결제방식 로딩 상태
-	let accountOptions = $state<string[]>([]); // 계정 옵션들
+	let accountList = $state<string[]>([]); // 읽어 온 그 달 계정 목록
+	let accountKey = $state<string | undefined>(undefined); // 계정을 읽은 문서·달 탭 (listKey, undefined = 아직 안 읽음)
+	// 보이는 목록: 연 줄의 원래 계정이 그 달 목록에 없으면 맨 앞에 (값을 바꿔도 원래 값으로 되돌릴 수 있게)
+	const accountOptions = $derived(
+		withCurrentValue(accountList, rowData[headers.findIndex((header: string) => isAccountField(header))])
+	);
 	let isLoadingAccounts = $state(false); // 계정 로딩 상태
 	
 	// DatePicker에서 사용할 날짜 정보
@@ -204,14 +217,20 @@
 
 	// 결제방식 옵션 가져오기
 	async function fetchPaymentMethodOptions() {
-		if (!spreadsheetId || !accessToken || isLoadingPaymentMethods || paymentMethodOptions.length > 0) {
-			return; // 이미 로드됐거나 로딩 중이거나 필요한 정보가 없으면 스킵
+		// 같은 문서·달 탭에서 이미 읽었거나 로딩 중이거나 필요한 정보가 없으면 스킵 (다른 해·달로 옮기면 다시 읽는다)
+		const key = listKey(spreadsheetId, sheetName);
+		if (!spreadsheetId || !accessToken || isLoadingPaymentMethods || (paymentMethodKey === key && paymentMethodList.length > 0)) {
+			return;
+		}
+		if (paymentMethodKey !== key) {
+			paymentMethodList = [];   // 다른 문서·달이면 옛 목록을 비운다
 		}
 		
 		isLoadingPaymentMethods = true;
+		const requestedSheet = sheetName;
 		
 		try {
-			const response = await fetch(`/api/sheets/${spreadsheetId}/payment-methods`, {
+			const response = await fetch(paymentMethodsUrl(spreadsheetId, requestedSheet), {
 				headers: {
 					'Authorization': `Bearer ${accessToken}`,
 					'Content-Type': 'application/json'
@@ -220,19 +239,10 @@
 			
 			if (response.ok) {
 				const data = await response.json();
-				let fetchedAccounts = data.accounts || [];
-				
-				// 현재 행의 결제방식 값이 옵션에 없으면 추가
-				const paymentMethodFieldIndex = headers.findIndex(header => isPaymentMethodField(header));
-				if (paymentMethodFieldIndex !== -1 && editedData[paymentMethodFieldIndex]) {
-					const currentPaymentMethodValue = editedData[paymentMethodFieldIndex].toString().trim();
-					if (currentPaymentMethodValue && !fetchedAccounts.includes(currentPaymentMethodValue)) {
-						fetchedAccounts = [currentPaymentMethodValue, ...fetchedAccounts];
-					}
-				}
-				
-				paymentMethodOptions = fetchedAccounts;
-				console.log('Payment method options loaded:', $state.snapshot(paymentMethodOptions));
+				if (listKey(spreadsheetId, sheetName) !== key) return;   // 그 사이 다른 문서·달로 옮겼으면 늦게 온 응답은 버린다
+				paymentMethodList = data.accounts || [];
+				paymentMethodKey = key;
+				console.log('Payment method options loaded:', $state.snapshot(paymentMethodList));
 			} else {
 				console.error('Failed to fetch account options:', response.statusText);
 			}
@@ -245,14 +255,20 @@
 
 	// 계정 옵션 가져오기
 	async function fetchAccountOptions() {
-		if (!spreadsheetId || !accessToken || isLoadingAccounts || accountOptions.length > 0) {
-			return; // 이미 로드됐거나 로딩 중이거나 필요한 정보가 없으면 스킵
+		// 같은 문서·달 탭에서 이미 읽었거나 로딩 중이거나 필요한 정보가 없으면 스킵 (다른 해·달로 옮기면 다시 읽는다)
+		const key = listKey(spreadsheetId, sheetName);
+		if (!spreadsheetId || !accessToken || isLoadingAccounts || (accountKey === key && accountList.length > 0)) {
+			return;
+		}
+		if (accountKey !== key) {
+			accountList = [];   // 다른 문서·달이면 옛 목록을 비운다
 		}
 		
 		isLoadingAccounts = true;
+		const requestedSheet = sheetName;
 		
 		try {
-			const response = await fetch(`/api/sheets/${spreadsheetId}/accounts`, {
+			const response = await fetch(accountsUrl(spreadsheetId, requestedSheet), {
 				headers: {
 					'Authorization': `Bearer ${accessToken}`,
 					'Content-Type': 'application/json'
@@ -261,19 +277,10 @@
 			
 			if (response.ok) {
 				const data = await response.json();
-				let fetchedAccounts = data.accounts || [];
-				
-				// 현재 행의 계정 값이 옵션에 없으면 추가
-				const accountFieldIndex = headers.findIndex(header => isAccountField(header));
-				if (accountFieldIndex !== -1 && editedData[accountFieldIndex]) {
-					const currentAccountValue = editedData[accountFieldIndex].toString().trim();
-					if (currentAccountValue && !fetchedAccounts.includes(currentAccountValue)) {
-						fetchedAccounts = [currentAccountValue, ...fetchedAccounts];
-					}
-				}
-				
-				accountOptions = fetchedAccounts;
-				console.log('Account options loaded:', $state.snapshot(accountOptions));
+				if (listKey(spreadsheetId, sheetName) !== key) return;   // 그 사이 다른 문서·달로 옮겼으면 늦게 온 응답은 버린다
+				accountList = data.accounts || [];
+				accountKey = key;
+				console.log('Account options loaded:', $state.snapshot(accountList));
 			} else {
 				console.error('Failed to fetch account options:', response.statusText);
 			}
@@ -284,8 +291,10 @@
 		}
 	}
 
-	// 모달이 열릴 때 결제방식 옵션 로드
+	// 모달이 열릴 때 결제방식 옵션 로드 (보고 있는 달 탭이 바뀌어도 다시 로드)
 	$effect(() => {
+		void sheetName;
+		void spreadsheetId;
 		if (isOpen && headers.some((header: string) => isPaymentMethodField(header))) {
 			// 데이터 초기화가 완료된 후 결제방식 옵션 로드
 			if (editedData && editedData.length > 0) {
@@ -294,8 +303,10 @@
 		}
 	});
 
-	// 모달이 열릴 때 계정 옵션 로드
+	// 모달이 열릴 때 계정 옵션 로드 (보고 있는 달 탭이 바뀌어도 다시 로드)
 	$effect(() => {
+		void sheetName;
+		void spreadsheetId;
 		if (isOpen && headers.some((header: string) => isAccountField(header))) {
 			// 데이터 초기화가 완료된 후 계정 옵션 로드
 			if (editedData && editedData.length > 0) {
