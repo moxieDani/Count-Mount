@@ -4,9 +4,9 @@ import type { RequestHandler } from './$types';
 import { parseCardUsage } from '$lib/card-usage/parse';
 import { fillDocName } from '$lib/server/docName';
 
-// 문서 이름. 테스트 중에는 .env 에 CARD_USAGE_DOC_NAME="{year} 테스트 카드사용내역" 을 둔다.
+// 문서 이름. 로컬에서 시험할 때는 .env 에 CARD_USAGE_DOC_NAME="[작업본] {year} 카드사용내역" 을 둔다.
 const DEFAULT_DOC_NAME = '{year} 카드사용내역';
-const RANGE = 'J1:K102';   // 실적 칸 (I는 거래 표와 띄우는 빈 열, 2026-11-18)
+const RANGE = 'J1:L102';   // 실적 표: J 항목, K 사용, L 기준 (I는 거래 표와 띄우는 빈 열, 2026-11-24)
 
 const quoteName = (s: string) => `'${s.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`; // Drive 검색어
 const quoteSheet = (s: string) => `'${s.replace(/'/g, "''")}'`; // A1 표기

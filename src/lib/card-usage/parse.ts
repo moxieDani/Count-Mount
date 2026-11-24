@@ -1,23 +1,20 @@
-// 카드사용내역 월 시트의 J1:K102 (실적 칸, I는 빈 열) 를 카드별로 묶는다.
-// 시트 모양: J:K 병합 줄(K 값 없음) = 카드 이름, 그 아래 [항목 이름, 남은 값] 줄들.
-// 남은 값은 시트가 이미 계산해 두므로(0 아래로 내려가지 않음) 여기서는 읽기만 한다.
+// 카드사용내역 월 시트의 J1:L102 (실적 표: J 항목, K 사용, L 기준) 를 카드별로 묶는다 (2026-11-24).
+// 시트 모양: 카드 이름 줄은 K·L 에 "사용"·"기준" 머리글, 그 아래 [항목 이름, 사용, 기준] 줄들.
+// 사용·기준은 시트가 계산해 두므로 여기서는 읽기만 하고, 게이지 비율과 색만 정한다.
 
-// 배지와 항목 줄이 같은 색을 쓴다
+// 배지와 게이지가 같은 색을 쓴다
 export type Tone = 'spend' | 'limit' | 'bonus' | 'done';
 
 export interface CardItem {
-	label: string;
-	text: string; // 시트에 보이는 값 그대로
-	value: number | null; // 숫자로 읽을 수 없으면 null
+	label: string; // 시트에 적힌 항목 이름 그대로
+	name: string; // 괄호 앞 이름 ("온라인쇼핑 건")
+	note: string; // 괄호 안 가게 목록 ("가게1, 가게2"), 없으면 ''
+	text: string; // 사용 칸에 보이는 값 그대로 (숫자가 아닐 때 보여 준다)
+	used: number | null; // 숫자로 읽을 수 없으면 null
+	total: number | null;
 	unit: '원' | '건';
-	tone: Tone | null; // 줄 색. 0 이면 무엇이든 완료, 남은 실적 금액·한도·보너스는 배지 색, 그 밖에는 null
-}
-
-// 배지를 정하는 남은 값 합계. 그런 항목이 카드에 없으면 null
-export interface CardStatus {
-	spend: number | null; // 실적을 채우려면 더 써야 하는 금액
-	limit: number | null; // 남은 기본 실적(혜택) 한도
-	bonus: number | null; // 남은 보너스 실적(혜택) 한도
+	ratio: number | null; // 게이지 채움 0~1. 사용·기준 중 하나라도 숫자가 아니면 null (게이지 없음)
+	tone: Tone | null; // 게이지 색. 다 채우면 done, 그 밖에는 항목 종류 색, 기타 건수는 null
 }
 
 export interface CardBadge {
@@ -28,89 +25,95 @@ export interface CardBadge {
 export interface CardBlock {
 	name: string;
 	items: CardItem[];
-	badges: CardBadge[]; // 기본 실적·보너스 실적 배지. 실적 금액·실적 한도 항목이 없으면 빈 배열
+	badges: CardBadge[]; // 실적·보너스 배지. 해당 항목이 없으면 빈 배열
 }
 
 const cell = (v: unknown) => (v == null ? '' : String(v).trim());
 
 function toNumber(text: string): number | null {
-	if (!/\d/.test(text) || /[^\d,.\s₩원+-]/.test(text)) return null;
+	if (!/\d/.test(text) || /[^\d,.\s₩원건+-]/.test(text)) return null;
 	const n = Number(text.replace(/[^\d.-]/g, ''));
 	return Number.isFinite(n) ? n : null;
 }
 
-// "남은 영화 결제 건(극장1, ...)" 처럼 괄호 설명을 빼고 "건"으로 끝나면 건수
-const unitOf = (label: string): CardItem['unit'] =>
-	/건$/.test(label.replace(/\([^)]*\)/g, '').trim()) ? '건' : '원';
-
-// 실적 금액: "채울 실적금액", "남은 배달 실적 결제금액"
-// 기본 한도: "남은 실적혜택 한도", "남은 배달 실적혜택 한도"
-// 보너스 한도: "남은 보너스 실적혜택 한도"
-type Role = 'spend' | 'limit' | 'bonus';
-const isBonus = (label: string) => /보너스/.test(label);
-function roleOf(label: string): Role | null {
-	if (!/실적/.test(label)) return null;
-	if (/한도/.test(label)) return isBonus(label) ? 'bonus' : 'limit';
-	return /금액/.test(label) ? 'spend' : null;
+// "온라인쇼핑 건(가게1, 가게2)" → 이름 "온라인쇼핑 건", 가게 목록 "가게1, 가게2"
+function splitLabel(label: string) {
+	const m = label.match(/^(.*?)\s*\(([^()]*)\)\s*$/);
+	return m ? { name: m[1], note: m[2].trim() } : { name: label, note: '' };
 }
 
-// 남은 값이 0 이면 무엇이든 완료(같은 색). 남아 있으면 기본 실적은 주황, 보너스(한도·건수)는 연보라,
-// 그 밖의 남은 건수는 색 없음
-function toneOf(label: string, value: number | null): Tone | null {
-	if (value === null) return null;
-	if (value <= 0) return 'done';
-	return isBonus(label) ? 'bonus' : roleOf(label);
+// 항목 종류 (이름으로 정한다)
+// 실적 금액: "실적", "배달 실적"   혜택: "실적혜택", "배달 혜택"   보너스: "보너스 혜택", "보너스 결제 건"
+type Kind = 'spend' | 'limit' | 'bonus' | 'count';
+const isBonus = (name: string) => /보너스/.test(name);
+function kindOf(name: string, unit: CardItem['unit']): Kind {
+	if (isBonus(name)) return 'bonus';
+	if (unit === '건') return 'count';
+	if (/혜택|한도/.test(name)) return 'limit';
+	return /실적/.test(name) ? 'spend' : 'count';
+}
+const isBonusLimit = (i: CardItem) => isBonus(i.name) && /혜택|한도/.test(i.name);
+const isFull = (i: CardItem) => i.ratio !== null && i.ratio >= 1;
+
+function toItem(label: string, usedCell: unknown, totalCell: unknown): CardItem & { kind: Kind } {
+	const { name, note } = splitLabel(label);
+	const text = cell(usedCell);
+	const used = typeof usedCell === 'number' ? usedCell : toNumber(text);
+	const total = typeof totalCell === 'number' ? totalCell : toNumber(cell(totalCell));
+	const unit: CardItem['unit'] = /건$/.test(name) ? '건' : '원';
+	const ratio = used === null || total === null ? null : total <= 0 ? 1 : Math.min(1, Math.max(0, used / total));
+	const kind = kindOf(name, unit);
+	const tone: Tone | null = ratio === 1 ? 'done' : kind === 'count' ? null : kind;
+	return { label, name, note, text, used, total, unit, ratio, tone, kind };
 }
 
-// 카드 전체 실적은 "채울 실적금액" 줄. 이 줄이 있으면 실적 배지는 이 값만 쓴다 (배달 실적 결제금액처럼 조건이 붙은 실적은 더하지 않는다, 2026-11-18)
-const isMainSpend = (label: string) => label.replace(/\s+/g, '') === '채울실적금액';
-
-function statusOf(items: CardItem[]): CardStatus | null {
-	const roles = items.map((i) => roleOf(i.label));
-	const hasMain = items.some((i) => isMainSpend(i.label));
-	const sum = (role: Role) => {
-		const values = items
-			.filter((i, k) => roles[k] === role && !(role === 'spend' && hasMain && !isMainSpend(i.label)))
-			.map((i) => Math.max(0, i.value ?? 0));
-		return values.length ? values.reduce((a, b) => a + b, 0) : null;
-	};
-	const status = { spend: sum('spend'), limit: sum('limit'), bonus: sum('bonus') };
-	return status.spend === null && status.limit === null && status.bonus === null ? null : status;
+// 혜택 한도를 다 채우면 그 혜택을 받는 건수 줄도 더 채울 필요가 없다 (예전 시트의 "한도 0 이면 남은 건수 0" 과 같다).
+// 보너스 건수는 보너스 혜택을, 그 밖의 건수는 기본 혜택(들)을 따른다.
+function settleCounts(items: (CardItem & { kind: Kind })[]): CardItem[] {
+	const limits = items.filter((i) => i.kind === 'limit');
+	const bonusLimits = items.filter(isBonusLimit);
+	const limitFull = limits.length > 0 && limits.every(isFull);
+	const bonusFull = bonusLimits.length > 0 && bonusLimits.every(isFull);
+	return items.map(({ kind, ...item }) => {
+		const followsFull = item.unit === '건' && (kind === 'bonus' ? bonusFull : kind === 'count' && limitFull);
+		return followsFull ? { ...item, tone: 'done' } : item;
+	});
 }
 
-const won = (n: number) => `${n.toLocaleString('ko-KR')}원`;
+const percent = (i: CardItem) => `${Math.floor((i.ratio ?? 0) * 100)}%`;
 
-// 카드 이름 옆 배지 2개: 기본 실적(실적 금액 → 기본 한도 → 달성)과 보너스 실적. 해당 항목이 있는 것만.
-export function cardBadges(status: CardStatus | null): CardBadge[] {
-	if (!status) return [];
+// 카드 이름 옆 배지: 실적(실적 줄, 없으면 첫 실적 금액 줄)과 보너스 혜택. 다 채우면 "달성".
+export function cardBadges(items: CardItem[]): CardBadge[] {
+	const gauged = items.filter((i) => i.ratio !== null);
+	const spend =
+		gauged.find((i) => i.name.replace(/\s+/g, '') === '실적') ??
+		gauged.find((i) => i.unit === '원' && kindOf(i.name, i.unit) === 'spend');
+	const bonus = gauged.find(isBonusLimit);
 	const badges: CardBadge[] = [];
-	if (status.spend !== null || status.limit !== null) {
-		if ((status.spend ?? 0) > 0) badges.push({ kind: 'spend', text: `실적까지 ${won(status.spend!)}` });
-		else if ((status.limit ?? 0) > 0) badges.push({ kind: 'limit', text: `한도 ${won(status.limit!)} 남음` });
-		else badges.push({ kind: 'done', text: '실적 달성' });
-	}
-	if (status.bonus !== null)
-		badges.push(
-			status.bonus > 0
-				? { kind: 'bonus', text: `보너스 한도 ${won(status.bonus)} 남음` }
-				: { kind: 'done', text: '보너스 달성' }
-		);
+	if (spend) badges.push(isFull(spend) ? { kind: 'done', text: '실적 달성' } : { kind: 'spend', text: `실적 ${percent(spend)}` });
+	if (bonus) badges.push(isFull(bonus) ? { kind: 'done', text: '보너스 달성' } : { kind: 'bonus', text: `보너스 ${percent(bonus)}` });
 	return badges;
 }
 
+// 카드 이름 줄: 사용 칸이 "사용" 머리글이거나 비어 있다
+const isHeader = (usedCell: string) => usedCell === '' || usedCell === '사용';
+
 export function parseCardUsage(rows: unknown[][]): CardBlock[] {
-	const cards: CardBlock[] = [];
+	const cards: { name: string; items: (CardItem & { kind: Kind })[] }[] = [];
 	for (const row of rows) {
 		const label = cell(row?.[0]);
-		const text = cell(row?.[1]);
 		if (!label) continue;
-		if (!text) {
-			cards.push({ name: label, items: [], badges: [] });
+		if (isHeader(cell(row?.[1]))) {
+			cards.push({ name: label, items: [] });
 			continue;
 		}
-		if (!cards.length) cards.push({ name: '', items: [], badges: [] });
-		const value = toNumber(text);
-		cards[cards.length - 1].items.push({ label, text, value, unit: unitOf(label), tone: toneOf(label, value) });
+		if (!cards.length) cards.push({ name: '', items: [] });
+		cards[cards.length - 1].items.push(toItem(label, row?.[1], row?.[2]));
 	}
-	return cards.filter((c) => c.items.length).map((c) => ({ ...c, badges: cardBadges(statusOf(c.items)) }));
+	return cards
+		.filter((c) => c.items.length)
+		.map((c) => {
+			const items = settleCounts(c.items);
+			return { name: c.name, items, badges: cardBadges(items) };
+		});
 }

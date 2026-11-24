@@ -64,13 +64,13 @@ describe('GET /api/card-usage', () => {
 		expect(calls[0]).toContain("name = '[작업본] 26년 카드사용내역'");
 	});
 
-	it('있으면 N월 시트의 J1:K102 를 카드별로 묶어 12달로 돌려준다 (없는 달은 null)', async () => {
+	it('있으면 N월 시트의 J1:L102 (항목·사용·기준) 를 카드별로 묶어 12달로 돌려준다 (없는 달은 null)', async () => {
 		const calls = stubGoogle({
 			files: [{ id: 'doc1', name: '2026 카드사용내역' }],
 			titles: ['요약', '10월', '11월'],
 			ranges: {
-				"'10월'!J1:K102": [['테스트카드A'], ['채울 실적금액', '0']],
-				"'11월'!J1:K102": [['테스트카드A'], ['채울 실적금액', '120,000']]
+				"'10월'!J1:L102": [['테스트카드A', '사용', '기준'], ['실적', '100,000', '100,000']],
+				"'11월'!J1:L102": [['테스트카드A', '사용', '기준'], ['실적', '40,000', '100,000']]
 			}
 		});
 		const body = await (await call()).json();
@@ -78,7 +78,8 @@ describe('GET /api/card-usage', () => {
 		expect(body.months).toHaveLength(12);
 		expect(body.months[0]).toBeNull();
 		expect(body.months[9][0]).toMatchObject({ name: '테스트카드A', badges: [{ kind: 'done', text: '실적 달성' }] });
-		expect(body.months[10][0]).toMatchObject({ name: '테스트카드A', badges: [{ kind: 'spend', text: '실적까지 120,000원' }] });
+		expect(body.months[10][0]).toMatchObject({ name: '테스트카드A', badges: [{ kind: 'spend', text: '실적 40%' }] });
+		expect(body.months[10][0].items[0]).toMatchObject({ used: 40000, total: 100000, ratio: 0.4 });
 		expect(calls.some((u) => u.includes('/spreadsheets/doc1/values:batchGet'))).toBe(true);
 	});
 

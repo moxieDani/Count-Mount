@@ -13,7 +13,10 @@
 
 	let cards = $derived(result?.found ? result.months[selectedMonth] : null);
 
-	const valueText = (i: CardItem) => (i.value === null ? i.text : `${i.value.toLocaleString('ko-KR')}${i.unit}`);
+	const num = (n: number | null) => (n ?? 0).toLocaleString('ko-KR');
+	// 건수 게이지는 기준 수만큼 칸을 나눈다 (기준이 1~10 건일 때)
+	const steps = (i: CardItem) =>
+		i.unit === '건' && i.total !== null && Number.isInteger(i.total) && i.total >= 1 && i.total <= 10 ? i.total : 0;
 
 	// 새로고침을 연달아 하면 늦게 온 이전 응답이 새 결과를 덮지 않도록 마지막 요청만 반영한다.
 	// quiet: 당겨서 새로고침할 때는 보던 화면을 그대로 두고 데이터만 바꾼다
@@ -93,8 +96,38 @@
 						<ul>
 							{#each card.items as item}
 								<li class="tone-{item.tone ?? 'none'}">
-									<span class="label">{item.label}</span>
-									<b>{valueText(item)}{#if item.tone === 'done'}<small>완료</small>{/if}</b>
+									<div class="row">
+										<span class="label">
+											{item.name}
+											{#if item.note}<small class="note">{item.note}</small>{/if}
+										</span>
+										{#if item.ratio === null}
+											<b>{item.text}</b>
+										{:else}
+											<b>
+												{num(item.used)} <span class="of">/ {num(item.total)}{item.unit}</span>
+												{#if item.tone === 'done'}<small class="done-mark">완료</small>{/if}
+											</b>
+										{/if}
+									</div>
+									{#if item.ratio !== null}
+										{@const n = steps(item)}
+										<div
+											class="gauge"
+											class:steps={n > 0}
+											role="meter"
+											aria-label={item.name}
+											aria-valuemin={0}
+											aria-valuemax={item.total ?? 0}
+											aria-valuenow={Math.min(item.used ?? 0, item.total ?? 0)}
+										>
+											{#if n > 0}
+												{#each { length: n } as _, k}<span class:on={k < (item.used ?? 0)}></span>{/each}
+											{:else}
+												<span style:width="{item.ratio * 100}%"></span>
+											{/if}
+										</div>
+									{/if}
 								</li>
 							{/each}
 						</ul>
@@ -231,43 +264,36 @@
 	}
 	ul {
 		display: grid;
-		gap: 4px;
+		gap: 14px;
 		padding: 0;
 		margin: 0;
 		list-style: none;
 	}
+	/* 항목 한 줄: 이름 · 사용 / 기준, 그 아래 게이지. 게이지와 숫자는 배지와 같은 색 */
 	li {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		gap: 12px;
-		padding: 11px 12px;
-		border-radius: 10px;
+		--bar: #8fa8e8;
+		--ink: #253550;
 		font-size: 14px;
 	}
-	/* 배지와 같은 색: 왼쪽 띠 + 옅은 바탕 + 값 색 */
 	li.tone-spend,
 	li.tone-limit {
-		background: #fff8ee;
-		box-shadow: inset 3px 0 #f0a43b;
-	}
-	li.tone-spend b,
-	li.tone-limit b {
-		color: #c46f12;
-	}
-	li.tone-done {
-		background: #effaf7;
-		box-shadow: inset 3px 0 #14a58e;
-	}
-	li.tone-done b {
-		color: #168a78;
+		--bar: #f0a43b;
+		--ink: #c46f12;
 	}
 	li.tone-bonus {
-		background: #f7f3fe;
-		box-shadow: inset 3px 0 #b59bec;
+		--bar: #b59bec;
+		--ink: #7a4fd0;
 	}
-	li.tone-bonus b {
-		color: #7a4fd0;
+	li.tone-done {
+		--bar: #14a58e;
+		--ink: #168a78;
+	}
+	.row {
+		display: flex;
+		justify-content: space-between;
+		align-items: flex-end;
+		gap: 12px;
+		margin-bottom: 7px;
 	}
 	.label {
 		min-width: 0;
@@ -275,14 +301,46 @@
 		word-break: keep-all;
 		overflow-wrap: anywhere;
 	}
+	.note {
+		display: block;
+		margin-top: 2px;
+		font-size: 11px;
+		color: #98a3b2;
+	}
 	li b {
 		white-space: nowrap;
-		color: #253550;
+		color: var(--ink);
 	}
-	li small {
+	.of {
+		font-weight: 500;
+		color: #98a3b2;
+	}
+	.done-mark {
 		margin-left: 6px;
 		font-size: 11px;
-		color: inherit;
+	}
+	.gauge {
+		display: flex;
+		height: 8px;
+		border-radius: 999px;
+		background: #edf1f6;
+		overflow: hidden;
+	}
+	.gauge > span {
+		background: var(--bar);
+		border-radius: 999px;
+		transition: width 0.3s ease;
+	}
+	.gauge.steps {
+		gap: 4px;
+		background: none;
+	}
+	.gauge.steps > span {
+		flex: 1;
+		background: #edf1f6;
+	}
+	.gauge.steps > span.on {
+		background: var(--bar);
 	}
 	.state {
 		text-align: center;
