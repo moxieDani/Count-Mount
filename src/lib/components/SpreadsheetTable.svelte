@@ -5,7 +5,7 @@
 	import EditRowModal from './EditRowModal.svelte';
 	import CreateRowModal from './CreateRowModal.svelte';
 	import SettlementBadge from './SettlementBadge.svelte';
-	import { CLEARED_ROW, clearRowRange } from '$lib/ledger/rows';
+	import { CLEARED_ROW, clearRowRange, rowRange, rowValues } from '$lib/ledger/rows';
 
 	// Google Picker API 타입 정의
 	const googlePicker: any = typeof window !== 'undefined' ? (window as any).google : null;
@@ -197,9 +197,9 @@
 
 		isModalLoading = true;
 		try {
-			// 수정된 데이터를 API로 업데이트
+			// 수정된 데이터를 API로 업데이트: 새 줄과 같이 Y~AE 일곱 칸을 써서 기록한 곳(AE)을 가계쀼로 덮어쓴다
 			const actualRowIndex = rowIndex + 27; // Y27부터 시작하므로 +27
-			const updateRange = `${tableData.metadata.sheetName}!Y${actualRowIndex}:AD${actualRowIndex}`;
+			const updateRange = rowRange(tableData.metadata.sheetName, actualRowIndex);
 			
 			const response = await fetch(`/api/sheets/${spreadsheetId}/update`, {
 				method: 'POST',
@@ -209,7 +209,7 @@
 				},
 				body: JSON.stringify({
 					range: updateRange,
-					values: [data],
+					values: [rowValues(data)],
 					valueInputOption: 'USER_ENTERED',
 					sheetName: tableData.metadata.sheetName,
 					dataRange: range // `range` prop is the full data range

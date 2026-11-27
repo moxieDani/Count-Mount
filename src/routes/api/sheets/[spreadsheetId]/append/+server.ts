@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { findDuplicateRow } from '$lib/ledger/duplicate';
-import { firstEmptyRow, newRowRange, newRowValues, sortRange } from '$lib/ledger/rows';
+import { firstEmptyRow, rowRange, rowValues, sortRange } from '$lib/ledger/rows';
 
 export const POST: RequestHandler = async ({ params, request }) => {
 	const { spreadsheetId } = params;
@@ -106,7 +106,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		}
 		
 		// Step 3: 빈 행에 Y~AE 일곱 칸을 쓴다 (AE = 기록한 곳 '가계쀼')
-		const updateRange = newRowRange(sheetName, targetRow);
+		const updateRange = rowRange(sheetName, targetRow);
 		const updateUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(updateRange)}?valueInputOption=USER_ENTERED`;
 		
 		console.log('Attempting to update range:', updateRange);
@@ -114,7 +114,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		console.log('Data to insert:', values);
 		
 		const updateBody = {
-			values: [newRowValues(values)],
+			values: [rowValues(values)],
 			majorDimension: 'ROWS'
 		};
 
